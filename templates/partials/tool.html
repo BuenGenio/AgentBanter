@@ -1,0 +1,13 @@
+<li class="tool {{ tool.icon }}{% if tool.result %} {{ 'ok' if tool.result.ok else 'err' }}{% endif %}" id="tool-{{ tool.id }}">
+  <details>
+    <summary>
+      <span class="ico"></span>
+      <span class="name">{{ tool.name }}</span>
+      <span class="sum">{{ tool.summary }}</span>
+      <span class="result" data-slot>{% if tool.result %}{% with r = tool.result %}{% include "partials/result.html" %}{% endwith %}{% endif %}</span>
+      <time datetime="{{ tool.ts }}">{{ tool.t }}</time>
+    </summary>
+    {% if tool.detail %}<pre class="detail">{{ tool.detail }}</pre>{% endif %}
+    <pre class="rdetail" data-rslot>{% if tool.result %}{{ tool.result.detail }}{% endif %}</pre>
+  </details>
+</li>

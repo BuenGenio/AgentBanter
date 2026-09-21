@@ -1,0 +1,6 @@
+{% if stats.duration %}<span class="chip">⏱ {{ stats.duration }}</span>{% endif %}
+{% if stats.commands %}<span class="chip">$ {{ stats.commands }} cmd{{ 's' if stats.commands != 1 }}</span>{% endif %}
+{% if stats.files %}<span class="chip" title="{{ stats.files|join(', ') }}">✎ {{ stats.files|length }} file{{ 's' if stats.files|length != 1 }}</span>{% endif %}
+{% if stats.reasoning %}<span class="chip">∴ {{ stats.reasoning }} thought{{ 's' if stats.reasoning != 1 }}</span>{% endif %}
+{% if stats.decisions %}<span class="chip accent">◆ {{ stats.decisions }} decision{{ 's' if stats.decisions != 1 }}</span>{% endif %}
+{% if stats.errors %}<span class="chip err">✕ {{ stats.errors }} failed</span>{% endif %}

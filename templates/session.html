@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block title %}{{ s.title }} · Claude Progress{% endblock %}
+{% block body %}
+<header class="top">
+  <div class="nav-glass" aria-hidden="true"></div>
+  <a class="back" href="/" title="All sessions">←</a>
+  <h1 title="{{ s.title }}">{{ s.title }}</h1>
+  <div class="meta">
+    <span class="mono" title="{{ s.cwd }}">{{ s.project }}</span>
+    {% if s.branch %}<span class="branch">⎇ {{ s.branch }}</span>{% endif %}
+    <span id="hdr-stats" class="hstats">{% include "partials/header_stats.html" %}</span>
+  </div>
+  <div class="controls">
+    <label title="Show Claude's reasoning"><input type="checkbox" id="t-reasoning" checked> <span>reasoning</span></label>
+    <label title="Show tool calls"><input type="checkbox" id="t-tools" checked> <span>tools</span></label>
+    <label title="Show heuristically inferred decisions"><input type="checkbox" id="t-inferred" checked> <span>inferred</span></label>
+    <label title="Auto-scroll to new activity"><input type="checkbox" id="t-follow" checked> <span>follow</span></label>
+    <span id="live" class="conn" title="live connection">●</span>
+  </div>
+</header>
+<main class="layout">
+  <section id="timeline" class="timeline" data-session="{{ s.id }}" data-seq="{{ seq }}">
+    {% for b in blocks %}{% include "partials/block.html" %}{% endfor %}
+  </section>
+  <aside class="decisions">
+    <details id="dpanel" open>
+      <summary><h2>Decisions <span class="count" id="dcount">{{ decisions|length }}</span></h2></summary>
+      <ol id="decisions">
+        {% for d in decisions %}{% include "partials/decision_panel.html" %}{% endfor %}
+      </ol>
+    </details>
+  </aside>
+</main>
+<script src="/static/app.js"></script>
+{% endblock %}

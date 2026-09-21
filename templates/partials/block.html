@@ -1,0 +1,6 @@
+{% if b.kind == "prompt" %}{% include "partials/prompt.html" %}
+{% elif b.kind == "narrative" %}{% include "partials/narrative.html" %}
+{% elif b.kind == "reasoning" %}{% include "partials/reasoning.html" %}
+{% elif b.kind == "step" %}{% include "partials/step.html" %}
+{% elif b.kind == "decision" %}{% include "partials/decision.html" %}
+{% endif %}

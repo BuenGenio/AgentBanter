@@ -1,0 +1,7 @@
+<article class="narrative" id="{{ b.id }}">
+  <div class="rail"><span class="dot"></span></div>
+  <div class="card">
+    <div class="head"><span class="who">Claude</span><time datetime="{{ b.ts }}">{{ b.t }}</time></div>
+    <div class="body md">{{ b.html|safe }}</div>
+  </div>
+</article>

@@ -1,0 +1,5 @@
+<li class="d {{ d.source }}"><a href="#{{ d.id }}">
+  <span class="line"><span class="tag">{{ d.source }}</span><span class="pn">#{{ d.prompt_n }} · {{ d.t }}</span></span>
+  {% if d.question %}<span class="q">{{ d.question }}</span>{% endif %}
+  <span class="a">{{ d.answer }}</span>
+</a></li>

@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}Sessions · Claude Progress{% endblock %}
+{% block body %}
+<header class="top">
+  <div class="nav-glass" aria-hidden="true"></div>
+  <h1>Claude Progress</h1>
+  <div class="meta"><span>{{ total }} sessions</span><a class="btn" href="/latest">Follow latest →</a></div>
+</header>
+<main class="index">
+{% for p in projects %}
+  <section class="project">
+    <h2 title="{{ p.cwd }}">{{ p.project }} <span class="path">{{ p.cwd }}</span></h2>
+    <ul class="sessions">
+    {% for m in p.sessions %}
+      <li class="{{ 'live' if m.live }}">
+        <a href="/s/{{ m.id }}">
+          <span class="dot"></span>
+          <span class="title">{{ m.title }}</span>
+          <span class="age">{{ m.age }}</span>
+          <span class="size">{{ m.size }}</span>
+        </a>
+      </li>
+    {% endfor %}
+    </ul>
+  </section>
+{% endfor %}
+</main>
+{% endblock %}
