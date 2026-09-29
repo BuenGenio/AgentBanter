@@ -8,7 +8,7 @@
 <p align="center">
   <a href="LICENSE"><img alt="MIT license" src="https://img.shields.io/badge/license-MIT-blue.svg"></a>
   <img alt="Rust 1.85+" src="https://img.shields.io/badge/rust-1.85%2B-orange.svg">
-  <img alt="Single binary, localhost only" src="https://img.shields.io/badge/runs-127.0.0.1%20only-success.svg">
+  <img alt="Single binary, localhost + tailnet only" src="https://img.shields.io/badge/runs-localhost%20%2B%20tailnet-success.svg">
   <a href="https://buymeacoffee.com/buengenio"><img alt="Buy me a coffee" src="https://img.shields.io/badge/☕-buy%20me%20a%20coffee-ffdd00.svg"></a>
 </p>
 
@@ -24,7 +24,8 @@ output buries the narrative, and the choices that shaped the code end up spread 
 
 `claude-progress` reads the transcripts Claude Code already writes (`~/.claude/projects/**/*.jsonl`), tails
 them, and serves a page you keep open **next to the chat** — in a browser tab or a VS Code split. Nothing is
-hooked into the chat, nothing leaves your machine.
+hooked into the chat, and the page is served only on localhost and, if the machine is on
+[Tailscale](https://tailscale.com), its tailnet address.
 
 ## What you see
 
@@ -63,6 +64,14 @@ Templates and assets are compiled into the binary, so the installed command work
 * **VS Code** — `Ctrl/⌘+Shift+P` → **Simple Browser: Show** → paste the URL → drag the tab into a split.
   No extension needed.
 
+### From another machine (Tailscale)
+
+By default the server also listens on the machine's Tailscale IPv4 (`tailscale ip -4`), so from any device on
+your tailnet open `http://<host>:7331/` — e.g. `http://tomahawk:7331/` with MagicDNS. Transcripts contain
+everything Claude saw, including secrets in tool output, so it never binds `0.0.0.0` on its own; use `--bind`
+to choose addresses explicitly (`--bind 127.0.0.1` for local only). Without Tailscale it falls back to
+127.0.0.1; use an SSH tunnel instead: `ssh -N -L 7331:127.0.0.1:7331 <host>`.
+
 ### Keep it running (Linux, systemd user service)
 
 ```ini
@@ -71,6 +80,8 @@ Templates and assets are compiled into the binary, so the installed command work
 Description=claude-progress
 
 [Service]
+# Wait for a tailnet address so it gets bound (gives up after 60 s and serves localhost only)
+ExecStartPre=-/bin/sh -c 'for i in $$(seq 60); do tailscale ip -4 >/dev/null 2>&1 && exit 0; sleep 1; done'
 ExecStart=%h/.cargo/bin/claude-progress
 Restart=on-failure
 
@@ -87,7 +98,8 @@ systemctl --user enable --now claude-progress
 ```
 claude-progress [OPTIONS]
 
-  --port <PORT>            Port to listen on, always bound to 127.0.0.1     [default: 7331]
+  --port <PORT>            Port to listen on                                 [default: 7331]
+  --bind <IP>              Address to listen on, repeatable       [default: 127.0.0.1 + Tailscale IPv4]
   --projects-dir <DIR>     Transcript root                                   [default: ~/.claude/projects]
   --poll-ms <MS>           How often open sessions are checked for new lines [default: 750]
   --open                   Open the most recent session in the browser

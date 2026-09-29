@@ -18,7 +18,7 @@ use render::Renderer;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::convert::Infallible;
-use std::net::SocketAddr;
+use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
@@ -30,9 +30,12 @@ use tower_http::services::ServeDir;
 #[derive(Parser)]
 #[command(version, about)]
 struct Args {
-    /// Port to listen on (binds 127.0.0.1 only)
+    /// Port to listen on
     #[arg(long, default_value_t = 7331)]
     port: u16,
+    /// Address to listen on; repeatable (default: 127.0.0.1 plus this machine's Tailscale IPv4, if any)
+    #[arg(long, value_name = "IP")]
+    bind: Vec<IpAddr>,
     /// Transcript root (default: ~/.claude/projects)
     #[arg(long)]
     projects_dir: Option<PathBuf>,
@@ -112,6 +115,18 @@ fn dump_assets(dir: &std::path::Path) -> anyhow::Result<()> {
     Ok(())
 }
 
+/// This machine's Tailscale IPv4 address, if `tailscale` is installed and up.
+fn tailscale_ip() -> Option<IpAddr> {
+    let out = std::process::Command::new("tailscale")
+        .args(["ip", "-4"])
+        .output()
+        .ok()?;
+    if !out.status.success() {
+        return None;
+    }
+    String::from_utf8(out.stdout).ok()?.lines().next()?.trim().parse().ok()
+}
+
 async fn embedded_static(Path(path): Path<String>) -> Response {
     match assets::static_file(&path) {
         Some((ct, body)) => ([(axum::http::header::CONTENT_TYPE, ct)], body).into_response(),
@@ -152,26 +167,53 @@ async fn main() -> anyhow::Result<()> {
     };
     let router = router.with_state(app);
 
-    let addr = SocketAddr::from(([127, 0, 0, 1], args.port));
-    let listener = tokio::net::TcpListener::bind(addr).await?;
-    let url = format!("http://{addr}");
+    let ips = if args.bind.is_empty() {
+        let mut ips = vec![IpAddr::V4(Ipv4Addr::LOCALHOST)];
+        match tailscale_ip() {
+            Some(ip) => ips.push(ip),
+            None => eprintln!("tailscale: no IPv4 address found, listening on 127.0.0.1 only"),
+        }
+        ips
+    } else {
+        args.bind
+    };
+    let mut listeners = Vec::new();
+    for ip in ips {
+        let addr = SocketAddr::new(ip, args.port);
+        let listener = tokio::net::TcpListener::bind(addr)
+            .await
+            .map_err(|e| anyhow::anyhow!("cannot listen on {addr}: {e}"))?;
+        listeners.push((addr, listener));
+    }
+    let urls: Vec<String> = listeners
+        .iter()
+        .map(|(addr, _)| format!("http://{addr}"))
+        .collect();
     let shown = |d: &Option<PathBuf>| {
         d.as_ref()
             .map(|p| p.display().to_string())
             .unwrap_or_else(|| "embedded".into())
     };
     eprintln!(
-        "claude-progress  {url}\n  transcripts: {}\n  templates:   {}\n  static:      {}",
+        "claude-progress  {}\n  transcripts: {}\n  templates:   {}\n  static:      {}",
+        urls.join("  "),
         projects_dir.display(),
         shown(&templates),
         shown(&static_dir)
     );
     if args.open {
         let _ = std::process::Command::new("xdg-open")
-            .arg(format!("{url}/latest"))
+            .arg(format!("{}/latest", urls[0]))
             .spawn();
     }
-    axum::serve(listener, router).await?;
+    let mut servers = tokio::task::JoinSet::new();
+    for (_, listener) in listeners {
+        servers.spawn(axum::serve(listener, router.clone()).into_future());
+    }
+    // Any listener stopping (only on error) ends the process.
+    if let Some(res) = servers.join_next().await {
+        res??;
+    }
     Ok(())
 }
 
