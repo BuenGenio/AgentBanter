@@ -25,7 +25,7 @@
   </section>
   {% if can_send %}
   <form id="composer" class="composer" autocomplete="off">
-    <textarea name="text" rows="1" placeholder="Message Claude…  (Enter to send, Shift+Enter for a new line)" aria-label="Message Claude" required></textarea>
+    <textarea name="text" rows="1" placeholder="Message Claude…" title="Enter to send, Shift+Enter for a new line" enterkeyhint="send" aria-label="Message Claude" required></textarea>
     <button type="submit">Send</button>
     <p class="composer-status" id="composer-status" role="status"></p>
   </form>
