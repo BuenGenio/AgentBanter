@@ -103,6 +103,9 @@ claude-progress [OPTIONS]
   --projects-dir <DIR>     Transcript root                                   [default: ~/.claude/projects]
   --poll-ms <MS>           How often open sessions are checked for new lines [default: 750]
   --open                   Open the most recent session in the browser
+  --allow-send             Add a message box that continues the session (see below)
+  --claude-bin <PATH>      Claude Code binary used for sending              [default: claude]
+  --send-permission-mode <MODE>  Permission mode for sent messages          [default: auto]
   --templates <DIR>        Use these templates instead of the built-in ones (hot-reloaded)
   --static <DIR>           Use this static dir instead of the built-in one
   --dump-assets <DIR>      Write the built-in templates/ and static/ into DIR, then exit
@@ -114,6 +117,18 @@ claude-progress [OPTIONS]
 | `/latest` | redirects to the most recently active session |
 | `/s/<id>` | a session |
 | `/s/<id>/events` | SSE stream of new activity (honours `Last-Event-ID`) |
+| `/s/<id>/send` | `POST {"text": …}` continues the session; `GET` returns the send status (`--allow-send`) |
+
+### Sending messages (`--allow-send`)
+
+With `--allow-send`, each session page gets a message box. A message runs
+`claude -p --resume <id>` in the session's directory, and the reply shows up in the timeline like any
+other activity. The VS Code and Cursor extensions keep a `claude` process per open chat, and appending
+from a second process would split that conversation. So when another process holds the session (found
+via `/proc`), or something else wrote to it in the last minute, the message goes to a **fork**
+(`--fork-session`) instead, and the page moves to it. Headless runs can't answer permission prompts, so
+choose what they may do with `--send-permission-mode`. Anyone who can open the page can run Claude as
+you, which is why this is off by default. Cross-site requests are refused.
 
 ## Make it look the way you want
 

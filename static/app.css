@@ -204,3 +204,26 @@ body.hide-inferred .decision.inferred, body.hide-inferred .d.inferred { display:
 .sessions .title { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .sessions .age, .sessions .size { color: var(--muted); font-size: 12px; white-space: nowrap; font-variant-numeric: tabular-nums; }
 @media (max-width: 720px) { .sessions .size { display: none; } }
+
+/* ---- composer (--allow-send) ----------------------------------------- */
+.main-col { min-width: 0; }
+.composer {
+  position: sticky; bottom: 0; z-index: 5; margin-top: 12px; padding: 10px 0 12px;
+  display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px 8px; align-items: end;
+  background: linear-gradient(to bottom, transparent, var(--bg) 14px);
+}
+.composer textarea {
+  resize: none; min-height: 38px; max-height: 40vh; padding: 9px 12px;
+  font: inherit; color: var(--ink); background: var(--panel);
+  border: 1px solid var(--line); border-radius: 10px;
+}
+.composer textarea:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+.composer button {
+  height: 38px; padding: 0 16px; font: inherit; font-weight: 600; cursor: pointer;
+  color: #fff; background: var(--accent); border: 0; border-radius: 10px;
+}
+.composer button:disabled { opacity: .5; cursor: default; }
+.composer-status { grid-column: 1 / -1; margin: 0; min-height: 1em; font-size: 12px; color: var(--muted); }
+.composer-status:empty { display: none; }
+.composer-status.err { color: var(--err); white-space: pre-wrap; }
+.composer-status a { color: var(--accent); text-decoration: underline; }

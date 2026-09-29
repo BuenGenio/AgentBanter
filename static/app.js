@@ -96,3 +96,62 @@ const navGrace = (() => {
     if (e.lastEventId) seq = parseInt(e.lastEventId, 10) + 1;
   };
 })();
+
+// Composer (only rendered with --allow-send): POSTs the message, then polls until claude exits.
+// A session open elsewhere is continued in a fork; the page moves there once its id is known.
+(() => {
+  const form = document.getElementById('composer');
+  const tl = document.getElementById('timeline');
+  if (!form || !tl) return;
+  const sid = tl.dataset.session;
+  const box = form.elements.text, btn = form.querySelector('button');
+  const status = document.getElementById('composer-status');
+  const say = (msg, err = false) => { status.textContent = msg; status.classList.toggle('err', err); };
+  const grow = () => { box.style.height = 'auto'; box.style.height = box.scrollHeight + 2 + 'px'; };
+  box.addEventListener('input', grow);
+  box.addEventListener('keydown', e => {
+    if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); form.requestSubmit(); }
+  });
+
+  const busy = on => { btn.disabled = on; box.readOnly = on; };
+  function show(st) {
+    const forked = st.session && st.session !== sid;
+    if (st.state === 'running') {
+      say(forked ? 'Open in another window, so continuing in a fork — opening it…' : 'Claude is working…');
+      if (forked) location.href = '/s/' + st.session;
+      return true;
+    }
+    busy(false);
+    if (st.state === 'failed') say(st.error || 'failed', true);
+    else if (st.state === 'done') {
+      if (forked) location.href = '/s/' + st.session; else say('');
+    }
+    return false;
+  }
+  async function poll() {
+    try {
+      const st = await (await fetch(`/s/${sid}/send`)).json();
+      if (show(st)) setTimeout(poll, 1500);
+    } catch { setTimeout(poll, 3000); }
+  }
+
+  form.addEventListener('submit', async e => {
+    e.preventDefault();
+    const text = box.value.trim();
+    if (!text) return;
+    busy(true); say('Sending…');
+    try {
+      const res = await fetch(`/s/${sid}/send`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text }),
+      });
+      const st = await res.json();
+      if (!res.ok) { busy(false); say(st.error || res.statusText, true); return; }
+      box.value = ''; grow();
+      if (show(st)) setTimeout(poll, 1500);
+    } catch (err) { busy(false); say(String(err), true); }
+  });
+  // Pick up a send still running from before a reload (a finished one is left alone).
+  fetch(`/s/${sid}/send`).then(r => r.json()).then(st => {
+    if (st.state === 'running') { busy(true); if (show(st)) setTimeout(poll, 1500); }
+  }).catch(() => {});
+})();

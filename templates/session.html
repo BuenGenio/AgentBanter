@@ -19,9 +19,18 @@
   </div>
 </header>
 <main class="layout">
+  <div class="main-col">
   <section id="timeline" class="timeline" data-session="{{ s.id }}" data-seq="{{ seq }}">
     {% for b in blocks %}{% include "partials/block.html" %}{% endfor %}
   </section>
+  {% if can_send %}
+  <form id="composer" class="composer" autocomplete="off">
+    <textarea name="text" rows="1" placeholder="Message Claude…  (Enter to send, Shift+Enter for a new line)" aria-label="Message Claude" required></textarea>
+    <button type="submit">Send</button>
+    <p class="composer-status" id="composer-status" role="status"></p>
+  </form>
+  {% endif %}
+  </div>
   <aside class="decisions">
     <details id="dpanel" open>
       <summary><h2>Decisions <span class="count" id="dcount">{{ decisions|length }}</span></h2></summary>

@@ -1,6 +1,7 @@
 mod assets;
 mod model;
 mod render;
+mod send;
 mod store;
 mod text;
 mod tools;
@@ -10,6 +11,7 @@ use axum::extract::{Path, Query, State};
 use axum::http::{HeaderMap, StatusCode};
 use axum::response::sse::{Event as SseEvent, KeepAlive, Sse};
 use axum::response::{Html, IntoResponse, Redirect, Response};
+use axum::Json;
 use axum::routing::get;
 use clap::Parser;
 use minijinja::context;
@@ -51,6 +53,16 @@ struct Args {
     /// Open the most recent session in the browser
     #[arg(long)]
     open: bool,
+    /// Show a message box on session pages that continues the session via `claude -p --resume`.
+    /// Anyone who can open the page can then run Claude as you, so it is off by default.
+    #[arg(long)]
+    allow_send: bool,
+    /// Claude Code binary used for sending
+    #[arg(long, value_name = "PATH", default_value = "claude")]
+    claude_bin: PathBuf,
+    /// Permission mode for sent messages (headless runs cannot ask; see `claude --help`)
+    #[arg(long, value_name = "MODE", default_value = "auto")]
+    send_permission_mode: String,
     /// Write the built-in templates/ and static/ into DIR (to customise them) and exit
     #[arg(long, value_name = "DIR")]
     dump_assets: Option<PathBuf>,
@@ -59,6 +71,7 @@ struct Args {
 struct App {
     store: Arc<Store>,
     render: Renderer,
+    sender: Option<Arc<send::Sender>>,
 }
 
 struct AppError(anyhow::Error);
@@ -154,13 +167,17 @@ async fn main() -> anyhow::Result<()> {
     let app = Arc::new(App {
         store,
         render: Renderer::new(templates.clone()),
+        sender: args
+            .allow_send
+            .then(|| send::Sender::new(args.claude_bin, args.send_permission_mode)),
     });
 
     let router = Router::new()
         .route("/", get(index))
         .route("/latest", get(latest))
         .route("/s/{id}", get(session))
-        .route("/s/{id}/events", get(events));
+        .route("/s/{id}/events", get(events))
+        .route("/s/{id}/send", get(send_status).post(send_message));
     let router = match &static_dir {
         Some(dir) => router.nest_service("/static", ServeDir::new(dir)),
         None => router.route("/static/{*path}", get(embedded_static)),
@@ -268,9 +285,70 @@ async fn session(
             blocks => s.blocks(),
             decisions => s.decisions(),
             seq => s.events.len(),
+            can_send => app.sender.is_some(),
         },
     )?;
     Ok(Html(html))
+}
+
+#[derive(Deserialize)]
+struct SendBody {
+    text: String,
+}
+
+fn send_error(code: StatusCode, msg: impl Into<String>) -> Response {
+    (code, Json(json!({ "state": "failed", "error": msg.into() }))).into_response()
+}
+
+async fn send_status(State(app): State<Arc<App>>, Path(id): Path<String>) -> Response {
+    match &app.sender {
+        Some(sender) => Json(sender.status(&id)).into_response(),
+        None => send_error(StatusCode::NOT_FOUND, "sending is disabled (start with --allow-send)"),
+    }
+}
+
+/// Continue a session with a new prompt. Forks when the session is open in another process or was
+/// written to moments ago by something other than us, so a live chat is never appended to twice.
+async fn send_message(
+    State(app): State<Arc<App>>,
+    Path(id): Path<String>,
+    headers: HeaderMap,
+    body: Option<Json<SendBody>>,
+) -> Response {
+    let Some(sender) = &app.sender else {
+        return send_error(StatusCode::NOT_FOUND, "sending is disabled (start with --allow-send)");
+    };
+    // Cross-site pages can't send a JSON body without a preflight we never answer, and a present
+    // Origin must match Host; together these stop other sites from driving Claude through the browser.
+    let host = headers.get("host").and_then(|h| h.to_str().ok());
+    let origin_ok = match headers.get("origin").and_then(|o| o.to_str().ok()) {
+        None => true,
+        Some(o) => host.is_some_and(|h| o.split_once("://").is_some_and(|(_, rest)| rest == h)),
+    };
+    if !origin_ok {
+        return send_error(StatusCode::FORBIDDEN, "cross-origin request refused");
+    }
+    let Some(Json(body)) = body else {
+        return send_error(StatusCode::BAD_REQUEST, "expected a JSON body {\"text\": …}");
+    };
+    let text = body.text.trim().to_string();
+    if text.is_empty() {
+        return send_error(StatusCode::BAD_REQUEST, "empty message");
+    }
+    let store = app.store.clone();
+    let id2 = id.clone();
+    let Ok(Some(meta)) =
+        tokio::task::spawn_blocking(move || store.scan().into_iter().find(|m| m.id == id2)).await
+    else {
+        return send_error(StatusCode::NOT_FOUND, "session not found");
+    };
+    let recent = (chrono::Utc::now() - meta.mtime).num_seconds() < 60;
+    let ours = matches!(sender.status(&id), send::SendStatus::Done { .. });
+    let fork = send::held_elsewhere(&id) || (recent && !ours);
+    match sender.start(&id, PathBuf::from(&meta.cwd), text, fork) {
+        Ok(()) => (StatusCode::ACCEPTED, Json(sender.status(&id))).into_response(),
+        Err(e) => send_error(StatusCode::CONFLICT, e.to_string()),
+    }
 }
 
 #[derive(Deserialize)]
