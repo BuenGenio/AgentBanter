@@ -33,7 +33,7 @@ const navGrace = (() => {
   for (const [id, cls] of Object.entries(toggles)) {
     const el = $(id);
     if (!el) continue;
-    const key = 'cp.' + id;
+    const key = 'agentbanter.' + id;
     try { const saved = localStorage.getItem(key); if (saved !== null) el.checked = saved === '1'; } catch {}
     const apply = () => {
       document.body.classList.toggle(cls, !el.checked);
@@ -52,6 +52,7 @@ const navGrace = (() => {
 
   function apply(m) {
     switch (m.kind) {
+      case 'reset': location.reload(); return;
       case 'tool': {
         const step = m.step && $(m.step)?.querySelector('.tools');
         (step || tl).appendChild(frag(m.html));
@@ -87,7 +88,7 @@ const navGrace = (() => {
   }
 
   // EventSource reconnects on its own and sends Last-Event-ID, which the server honours over `from`.
-  const es = new EventSource(`/s/${sid}/events?from=${seq}`);
+  const es = new EventSource(`/s/${sid}/events?from=${seq}&generation=${tl.dataset.generation || 0}`);
   es.onopen = () => live.classList.add('on');
   es.onerror = () => live.classList.remove('on');
   es.onmessage = e => {

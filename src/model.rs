@@ -639,7 +639,7 @@ impl Session {
             match &self.events[j] {
                 Event::Tool(tv) => {
                     st.tools += 1;
-                    if tv.name == "Bash" {
+                    if matches!(tv.name.as_str(), "Bash" | "exec_command" | "shell_command") {
                         st.commands += 1;
                     }
                     files.extend(tv.files.iter().cloned());

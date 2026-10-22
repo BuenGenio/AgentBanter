@@ -1,0 +1,13 @@
+[
+  {
+    "id": "chatgpt-demo",
+    "title": "Checkout rate limit discussion",
+    "current_node": "answer",
+    "mapping": {
+      "root": {"parent": null, "children": ["question"], "message": null},
+      "question": {"parent": "root", "children": ["old-answer", "answer"], "message": {"author": {"role": "user"}, "create_time": 1792605600, "content": {"content_type": "text", "parts": ["Which rate limiting approach fits a checkout API?"]}}},
+      "old-answer": {"parent": "question", "children": [], "message": {"author": {"role": "assistant"}, "create_time": 1792605610, "content": {"content_type": "text", "parts": ["This regenerated answer is not on the selected branch."]}}},
+      "answer": {"parent": "question", "children": [], "message": {"author": {"role": "assistant"}, "create_time": 1792605620, "content": {"content_type": "text", "parts": ["I'd recommend a **token bucket**: it permits brief bursts while enforcing a sustained request rate.\n\nReturn `429 Too Many Requests` with a retry interval when the bucket is empty."]}}}
+    }
+  }
+]

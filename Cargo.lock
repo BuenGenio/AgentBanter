@@ -3,6 +3,27 @@
 version = 4
 
 [[package]]
+name = "agentbanter"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-stream",
+ "axum",
+ "chrono",
+ "clap",
+ "dirs",
+ "minijinja",
+ "minijinja-autoreload",
+ "pulldown-cmark",
+ "regex",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tokio-stream",
+ "tower-http",
+]
+
+[[package]]
 name = "aho-corasick"
 version = "1.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -249,27 +270,6 @@ name = "clap_lex"
 version = "1.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1c133bc6a41be0d194c306b5506d15e6feeea7b1d6604bd3f8310dfb2ca96486"
-
-[[package]]
-name = "claude-progress"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "async-stream",
- "axum",
- "chrono",
- "clap",
- "dirs",
- "minijinja",
- "minijinja-autoreload",
- "pulldown-cmark",
- "regex",
- "serde",
- "serde_json",
- "tokio",
- "tokio-stream",
- "tower-http",
-]
 
 [[package]]
 name = "colorchoice"

@@ -19,9 +19,15 @@ use tokio::process::Command;
 pub enum SendStatus {
     Idle,
     /// `session` is where the reply is being written: the same id, or the fork's once known.
-    Running { session: Option<String> },
-    Done { session: Option<String> },
-    Failed { error: String },
+    Running {
+        session: Option<String>,
+    },
+    Done {
+        session: Option<String>,
+    },
+    Failed {
+        error: String,
+    },
 }
 
 pub struct Sender {
@@ -49,7 +55,13 @@ impl Sender {
     }
 
     /// Start `claude` for this session unless one we started is still running.
-    pub fn start(self: &Arc<Self>, id: &str, cwd: PathBuf, text: String, fork: bool) -> anyhow::Result<()> {
+    pub fn start(
+        self: &Arc<Self>,
+        id: &str,
+        cwd: PathBuf,
+        text: String,
+        fork: bool,
+    ) -> anyhow::Result<()> {
         {
             let mut status = self.status.lock().unwrap();
             if matches!(status.get(id), Some(SendStatus::Running { .. })) {
@@ -73,10 +85,22 @@ impl Sender {
     }
 
     /// Runs one turn; returns the id of the session the reply was written to.
-    async fn run(&self, id: &str, cwd: &Path, text: &str, fork: bool) -> anyhow::Result<Option<String>> {
+    async fn run(
+        &self,
+        id: &str,
+        cwd: &Path,
+        text: &str,
+        fork: bool,
+    ) -> anyhow::Result<Option<String>> {
         let mut cmd = Command::new(&self.claude_bin);
-        cmd.args(["-p", "--resume", id, "--permission-mode", &self.permission_mode])
-            .args(["--output-format", "stream-json", "--verbose"]);
+        cmd.args([
+            "-p",
+            "--resume",
+            id,
+            "--permission-mode",
+            &self.permission_mode,
+        ])
+        .args(["--output-format", "stream-json", "--verbose"]);
         if fork {
             cmd.arg("--fork-session");
         }

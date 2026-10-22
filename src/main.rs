@@ -1,17 +1,19 @@
 mod assets;
+mod chatgpt;
 mod model;
 mod render;
 mod send;
+mod source;
 mod store;
 mod text;
 mod tools;
 
+use axum::Json;
 use axum::Router;
 use axum::extract::{Path, Query, State};
 use axum::http::{HeaderMap, StatusCode};
 use axum::response::sse::{Event as SseEvent, KeepAlive, Sse};
 use axum::response::{Html, IntoResponse, Redirect, Response};
-use axum::Json;
 use axum::routing::get;
 use clap::Parser;
 use minijinja::context;
@@ -19,16 +21,18 @@ use model::Event;
 use render::Renderer;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
+use source::Source;
 use std::convert::Infallible;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::path::PathBuf;
 use std::sync::Arc;
+use std::sync::atomic::Ordering;
 use std::time::Duration;
 use store::{Loaded, SessionMeta, Store};
 use tokio_stream::Stream;
 use tower_http::services::ServeDir;
 
-/// Live, readable view of Claude Code sessions: prompts, reasoning, tool steps and decisions.
+/// AgentBanter: follow Codex, ChatGPT and Claude Code conversations.
 #[derive(Parser)]
 #[command(version, about)]
 struct Args {
@@ -41,6 +45,23 @@ struct Args {
     /// Transcript root (default: ~/.claude/projects)
     #[arg(long)]
     projects_dir: Option<PathBuf>,
+    /// Sources to display (comma-separated)
+    #[arg(
+        long,
+        value_enum,
+        value_delimiter = ',',
+        default_value = "claude,codex,chatgpt"
+    )]
+    sources: Vec<Source>,
+    /// Codex rollout root (default: $CODEX_HOME/sessions or ~/.codex/sessions)
+    #[arg(long)]
+    codex_dir: Option<PathBuf>,
+    /// Imported ChatGPT transcripts (default: OS data directory/agentbanter/chatgpt)
+    #[arg(long)]
+    chatgpt_dir: Option<PathBuf>,
+    /// Import an unzipped ChatGPT conversations.json into --chatgpt-dir, then exit
+    #[arg(long, value_name = "JSON")]
+    import_chatgpt: Option<PathBuf>,
     /// Template directory (default: ./templates, else the source tree's)
     #[arg(long)]
     templates: Option<PathBuf>,
@@ -122,7 +143,7 @@ fn dump_assets(dir: &std::path::Path) -> anyhow::Result<()> {
         println!("wrote {}", path.display());
     }
     println!(
-        "\nRun with: claude-progress --templates {0}/templates --static {0}/static",
+        "\nRun with: agentbanter --templates {0}/templates --static {0}/static",
         dir.display()
     );
     Ok(())
@@ -137,7 +158,13 @@ fn tailscale_ip() -> Option<IpAddr> {
     if !out.status.success() {
         return None;
     }
-    String::from_utf8(out.stdout).ok()?.lines().next()?.trim().parse().ok()
+    String::from_utf8(out.stdout)
+        .ok()?
+        .lines()
+        .next()?
+        .trim()
+        .parse()
+        .ok()
 }
 
 async fn embedded_static(Path(path): Path<String>) -> Response {
@@ -153,16 +180,47 @@ async fn main() -> anyhow::Result<()> {
     if let Some(dir) = args.dump_assets {
         return dump_assets(&dir);
     }
+    let home =
+        dirs::home_dir().ok_or_else(|| anyhow::anyhow!("cannot determine home directory"))?;
+    let chatgpt_dir = args.chatgpt_dir.unwrap_or_else(|| {
+        dirs::data_local_dir()
+            .unwrap_or_else(|| home.join(".local/share"))
+            .join("agentbanter/chatgpt")
+    });
+    if let Some(path) = args.import_chatgpt {
+        let count = chatgpt::import(&path, &chatgpt_dir)?;
+        println!(
+            "Imported {count} ChatGPT conversations into {}",
+            chatgpt_dir.display()
+        );
+        return Ok(());
+    }
     let projects_dir = args
         .projects_dir
-        .or_else(|| dirs::home_dir().map(|h| h.join(".claude").join("projects")))
-        .ok_or_else(|| {
-            anyhow::anyhow!("cannot determine ~/.claude/projects; pass --projects-dir")
-        })?;
+        .unwrap_or_else(|| home.join(".claude/projects"));
+    let codex_dir = args.codex_dir.unwrap_or_else(|| {
+        std::env::var_os("CODEX_HOME")
+            .map(PathBuf::from)
+            .unwrap_or_else(|| home.join(".codex"))
+            .join("sessions")
+    });
+    let roots: Vec<_> = [
+        (Source::Claude, projects_dir),
+        (Source::Codex, codex_dir),
+        (Source::Chatgpt, chatgpt_dir),
+    ]
+    .into_iter()
+    .filter(|(source, _)| args.sources.contains(source))
+    .collect();
+    let shown_roots = roots
+        .iter()
+        .map(|(s, p)| format!("{}: {}", s.label(), p.display()))
+        .collect::<Vec<_>>()
+        .join("\n  ");
     let templates = resolve_dir(args.templates, "templates")?;
     let static_dir = resolve_dir(args.static_dir, "static")?;
 
-    let store = Store::new(projects_dir.clone());
+    let store = Store::new(roots);
     store.spawn_tailer(Duration::from_millis(args.poll_ms));
     let app = Arc::new(App {
         store,
@@ -212,9 +270,9 @@ async fn main() -> anyhow::Result<()> {
             .unwrap_or_else(|| "embedded".into())
     };
     eprintln!(
-        "claude-progress  {}\n  transcripts: {}\n  templates:   {}\n  static:      {}",
+        "AgentBanter  {}\n  {}\n  templates:   {}\n  static:      {}",
         urls.join("  "),
-        projects_dir.display(),
+        shown_roots,
         shown(&templates),
         shown(&static_dir)
     );
@@ -285,7 +343,10 @@ async fn session(
             blocks => s.blocks(),
             decisions => s.decisions(),
             seq => s.events.len(),
-            can_send => app.sender.is_some(),
+            can_send => app.sender.is_some() && loaded.source == Source::Claude,
+            agent => loaded.source.label(),
+            is_import => loaded.source == Source::Chatgpt,
+            generation => loaded.generation.load(Ordering::SeqCst),
         },
     )?;
     Ok(Html(html))
@@ -297,13 +358,26 @@ struct SendBody {
 }
 
 fn send_error(code: StatusCode, msg: impl Into<String>) -> Response {
-    (code, Json(json!({ "state": "failed", "error": msg.into() }))).into_response()
+    (
+        code,
+        Json(json!({ "state": "failed", "error": msg.into() })),
+    )
+        .into_response()
 }
 
 async fn send_status(State(app): State<Arc<App>>, Path(id): Path<String>) -> Response {
+    if id.starts_with("codex--") || id.starts_with("chatgpt--") {
+        return send_error(
+            StatusCode::FORBIDDEN,
+            "sending is only supported for Claude sessions",
+        );
+    }
     match &app.sender {
         Some(sender) => Json(sender.status(&id)).into_response(),
-        None => send_error(StatusCode::NOT_FOUND, "sending is disabled (start with --allow-send)"),
+        None => send_error(
+            StatusCode::NOT_FOUND,
+            "sending is disabled (start with --allow-send)",
+        ),
     }
 }
 
@@ -315,8 +389,17 @@ async fn send_message(
     headers: HeaderMap,
     body: Option<Json<SendBody>>,
 ) -> Response {
+    if id.starts_with("codex--") || id.starts_with("chatgpt--") {
+        return send_error(
+            StatusCode::FORBIDDEN,
+            "sending is only supported for Claude sessions",
+        );
+    }
     let Some(sender) = &app.sender else {
-        return send_error(StatusCode::NOT_FOUND, "sending is disabled (start with --allow-send)");
+        return send_error(
+            StatusCode::NOT_FOUND,
+            "sending is disabled (start with --allow-send)",
+        );
     };
     // Cross-site pages can't send a JSON body without a preflight we never answer, and a present
     // Origin must match Host; together these stop other sites from driving Claude through the browser.
@@ -329,7 +412,10 @@ async fn send_message(
         return send_error(StatusCode::FORBIDDEN, "cross-origin request refused");
     }
     let Some(Json(body)) = body else {
-        return send_error(StatusCode::BAD_REQUEST, "expected a JSON body {\"text\": …}");
+        return send_error(
+            StatusCode::BAD_REQUEST,
+            "expected a JSON body {\"text\": …}",
+        );
     };
     let text = body.text.trim().to_string();
     if text.is_empty() {
@@ -354,6 +440,7 @@ async fn send_message(
 #[derive(Deserialize)]
 struct FromQuery {
     from: Option<usize>,
+    generation: Option<u64>,
 }
 
 async fn events(
@@ -375,7 +462,12 @@ async fn events(
 
     let stream = async_stream::stream! {
         let mut sent = from;
+        let generation = q.generation.unwrap_or_else(||loaded.generation.load(Ordering::SeqCst));
         loop {
+            if loaded.generation.load(Ordering::SeqCst) != generation {
+                yield Ok(SseEvent::default().data(json!({"kind":"reset"}).to_string()));
+                break;
+            }
             for (seq, payload) in render_since(&app, &loaded, sent) {
                 sent = sent.max(seq + 1);
                 yield Ok(SseEvent::default().id(seq.to_string()).data(payload));
@@ -411,12 +503,12 @@ fn render_since(app: &App, loaded: &Loaded, from: usize) -> Vec<(usize, String)>
             }),
             Event::Decision(d) => json!({
                 "kind": "decision",
-                "html": r("partials/block.html", context! { b => model::Block::Decision(d.clone()) }),
+                "html": r("partials/block.html", context! { b => model::Block::Decision(d.clone()), agent => loaded.source.label() }),
                 "panel": r("partials/decision_panel.html", context! { d => d }),
             }),
             _ => {
                 let Some(b) = s.block_at(i) else { continue };
-                json!({ "kind": "block", "html": r("partials/block.html", context! { b => b }) })
+                json!({ "kind": "block", "html": r("partials/block.html", context! { b => b, agent => loaded.source.label() }) })
             }
         };
         out.push((i, payload.to_string()));

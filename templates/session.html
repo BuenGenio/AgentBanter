@@ -1,17 +1,18 @@
 {% extends "base.html" %}
-{% block title %}{{ s.title }} · Claude Progress{% endblock %}
+{% block title %}{{ s.title }} · AgentBanter{% endblock %}
 {% block body %}
 <header class="top">
   <div class="nav-glass" aria-hidden="true"></div>
   <a class="back" href="/" title="All sessions">←</a>
   <h1 title="{{ s.title }}">{{ s.title }}</h1>
   <div class="meta">
+    <span class="branch">{{ agent }}{% if is_import %} · imported{% endif %}</span>
     <span class="mono" title="{{ s.cwd }}">{{ s.project }}</span>
     {% if s.branch %}<span class="branch">⎇ {{ s.branch }}</span>{% endif %}
     <span id="hdr-stats" class="hstats">{% include "partials/header_stats.html" %}</span>
   </div>
   <div class="controls">
-    <label title="Show Claude's reasoning"><input type="checkbox" id="t-reasoning" checked> <span>reasoning</span></label>
+    <label title="Show available reasoning summaries"><input type="checkbox" id="t-reasoning" checked> <span>reasoning</span></label>
     <label title="Show tool calls"><input type="checkbox" id="t-tools" checked> <span>tools</span></label>
     <label title="Show heuristically inferred decisions"><input type="checkbox" id="t-inferred" checked> <span>inferred</span></label>
     <label title="Auto-scroll to new activity"><input type="checkbox" id="t-follow" checked> <span>follow</span></label>
@@ -20,7 +21,8 @@
 </header>
 <main class="layout">
   <div class="main-col">
-  <section id="timeline" class="timeline" data-session="{{ s.id }}" data-seq="{{ seq }}">
+  <section id="timeline" class="timeline" data-session="{{ s.id }}" data-seq="{{ seq }}" data-generation="{{ generation }}">
+    {% if is_import %}<p class="source-note">ChatGPT export snapshot. Import a newer export to update this conversation. Attachments are shown as placeholders.</p>{% endif %}
     {% for b in blocks %}{% include "partials/block.html" %}{% endfor %}
   </section>
   {% if can_send %}

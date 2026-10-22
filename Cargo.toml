@@ -1,13 +1,13 @@
 [package]
-name = "claude-progress"
+name = "agentbanter"
 version = "0.1.0"
 edition = "2024"
 rust-version = "1.85"
-description = "Live, readable view of Claude Code sessions: prompts, reasoning, tool steps and decisions"
+description = "Follow Codex, ChatGPT and Claude Code conversations, tool steps and decisions"
 license = "MIT"
-repository = "https://github.com/BuenGenio/claude-progress"
+repository = "https://github.com/BuenGenio/AgentBanter"
 readme = "README.md"
-keywords = ["claude", "claude-code", "transcript", "viewer", "sse"]
+keywords = ["codex", "chatgpt", "claude", "transcript", "viewer"]
 categories = ["development-tools", "visualization"]
 
 [dependencies]

@@ -89,8 +89,8 @@ pub fn summarize(name: &str, input: &Value, cwd: Option<&str>) -> ToolSummary {
     };
 
     match name {
-        "Bash" => {
-            let cmd = s("command");
+        "Bash" | "exec_command" | "shell_command" => {
+            let cmd = input["cmd"].as_str().unwrap_or_else(|| s("command"));
             let desc = s("description");
             out.icon = "bash";
             out.summary = truncate(
@@ -103,6 +103,31 @@ pub fn summarize(name: &str, input: &Value, cwd: Option<&str>) -> ToolSummary {
             );
             out.detail = truncate(cmd, 4000);
             out.files = shell_targets(cmd).into_iter().map(|t| rel(&t)).collect();
+        }
+        "apply_patch" => {
+            let patch = s("patch");
+            out.icon = "edit";
+            out.files = patch
+                .lines()
+                .filter_map(|l| {
+                    [
+                        "*** Add File: ",
+                        "*** Update File: ",
+                        "*** Delete File: ",
+                        "*** Move to: ",
+                    ]
+                    .iter()
+                    .find_map(|prefix| l.strip_prefix(prefix))
+                })
+                .map(rel)
+                .collect();
+            out.summary = truncate(&format!("Patch {}", out.files.join(", ")), 140);
+            out.detail = truncate(patch, 4000);
+        }
+        "exec" => {
+            out.icon = "tool";
+            out.summary = "Run tools".to_string();
+            out.detail = truncate(s("input"), 4000);
         }
         "Edit" | "MultiEdit" => {
             let p = rel(s("file_path"));

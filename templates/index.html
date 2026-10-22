@@ -1,12 +1,18 @@
 {% extends "base.html" %}
-{% block title %}Sessions · Claude Progress{% endblock %}
+{% block title %}Sessions · AgentBanter{% endblock %}
 {% block body %}
 <header class="top">
   <div class="nav-glass" aria-hidden="true"></div>
-  <h1>Claude Progress</h1>
+  <h1>AgentBanter</h1>
   <div class="meta"><span>{{ total }} sessions</span><a class="btn" href="/latest">Follow latest →</a></div>
 </header>
 <main class="index">
+{% if not projects %}
+  <section class="project"><h2>No conversations found</h2>
+  <p>AgentBanter reads local Codex and Claude Code logs. To add ChatGPT chats, import an unzipped data export:</p>
+  <pre>agentbanter --import-chatgpt /path/to/conversations.json</pre>
+  </section>
+{% endif %}
 {% for p in projects %}
   <section class="project">
     <h2 title="{{ p.cwd }}">{{ p.project }} <span class="path">{{ p.cwd }}</span></h2>
@@ -16,6 +22,7 @@
         <a href="/s/{{ m.id }}">
           <span class="dot"></span>
           <span class="title">{{ m.title }}</span>
+          <span class="branch">{{ m.agent }}{% if m.source == "chatgpt" %} · imported{% endif %}</span>
           <span class="age">{{ m.age }}</span>
           <span class="size">{{ m.size }}</span>
         </a>
