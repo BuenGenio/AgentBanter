@@ -14,13 +14,15 @@ AgentBanter is the renamed and expanded version of claude-progress. It runs as o
 
 ## Install and launch
 
-From this checkout (Rust 1.88 or newer):
+Install the prebuilt release with Homebrew on macOS or Linux:
 
 ```sh
-cargo install --path . --locked
+brew install buengenio/tap/agentbanter
 agentbanter open
 # http://127.0.0.1:7331
 ```
+
+Or download an archive from [GitHub Releases](https://github.com/BuenGenio/AgentBanter/releases/latest), extract it, and run `./install.sh`. Source installation is also available with Rust 1.88 or newer: `cargo install --path . --locked`.
 
 `open` starts the server if needed, waits for readiness, and opens your browser. Repeated launches reuse it. Use `agentbanter open --no-browser` for headless use, or `agentbanter serve` to run in the foreground. The default bind address is `127.0.0.1`.
 
@@ -33,7 +35,7 @@ agentbanter service install     # Linux systemd user unit (does not start it)
 agentbanter service start
 ```
 
-The release workflow builds macOS and Linux archives for ARM64 and x86-64, with checksums and a Homebrew formula. After a release and the tap have been published, installation will be `brew install buengenio/tap/agentbanter`. See [packaging, configuration, and release instructions](docs/packaging.md) for setup and publication status requirements.
+Prebuilt archives are available for macOS and Linux on ARM64 and x86-64, with SHA-256 checksums and a [Homebrew tap](https://github.com/BuenGenio/homebrew-tap). See [packaging, configuration, and release instructions](docs/packaging.md) for configuration, services, and release maintenance.
 
 For development with live asset updates:
 
