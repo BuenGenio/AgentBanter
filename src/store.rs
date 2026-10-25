@@ -1,4 +1,4 @@
-//! Indexes transcripts across sources, lazily parses sessions, and tails changes.
+//! Finds transcripts under ~/.claude/projects, parses the ones being viewed, and tails them for changes.
 
 use crate::model::{Session, user_text};
 use crate::source::{self, Source};
@@ -21,6 +21,9 @@ pub struct SessionMeta {
     pub id: String,
     pub source: Source,
     pub agent: String,
+    pub parent_id: Option<String>,
+    pub agent_name: Option<String>,
+    pub agent_task: Option<String>,
     #[serde(skip)]
     pub path: PathBuf,
     pub slug: String,
@@ -254,7 +257,7 @@ fn collect_transcripts(dir: &Path, source: Source, depth: usize, out: &mut Vec<P
         let path = entry.path();
         if kind.is_file() && path.extension().is_some_and(|e| e == "jsonl") {
             out.push(path);
-        } else if kind.is_dir() && depth < if source == Source::Claude { 1 } else { 4 } {
+        } else if kind.is_dir() && depth < if source == Source::Claude { 3 } else { 4 } {
             collect_transcripts(&path, source, depth + 1, out);
         }
     }
@@ -267,7 +270,7 @@ fn peek(path: &Path, slug: &str, source: Source, mtime: SystemTime, size: u64) -
         .file_stem()
         .map(|s| s.to_string_lossy().to_string())
         .unwrap_or_default();
-    let native_id =
+    let codex_native =
         if source == Source::Codex && native_id.starts_with("rollout-") && native_id.len() >= 36 {
             let suffix = native_id.get(native_id.len() - 36..).unwrap_or(&native_id);
             if suffix.bytes().filter(|&b| b == b'-').count() == 4 {
@@ -278,17 +281,54 @@ fn peek(path: &Path, slug: &str, source: Source, mtime: SystemTime, size: u64) -
         } else {
             &native_id
         };
-    let mut id = source.session_id(native_id);
+    let mut id = source.session_id(codex_native);
+    let mut parent_id = None;
+    let mut agent_name = None;
+    let mut agent_task = None;
+    if source == Source::Claude
+        && path
+            .parent()
+            .and_then(|p| p.file_name())
+            .is_some_and(|n| n == "subagents")
+    {
+        parent_id = path
+            .parent()
+            .and_then(|p| p.parent())
+            .and_then(|p| p.file_name())
+            .map(|s| s.to_string_lossy().into_owned());
+        if let Some(parent) = &parent_id {
+            id = format!("claude-agent--{parent}--{native_id}");
+            agent_name = Some(native_id.clone());
+        }
+    }
     let (mut cwd, mut first_prompt, mut title) = (String::new(), String::new(), String::new());
 
     if let Ok(mut f) = fs::File::open(path) {
-        let mut head = vec![0u8; CHUNK.min(size) as usize];
+        let head_limit = if source == Source::Codex {
+            2 * 1024 * 1024
+        } else {
+            CHUNK
+        };
+        let mut head = vec![0u8; head_limit.min(size) as usize];
         if f.read_exact(&mut head).is_ok() {
             for line in String::from_utf8_lossy(&head).lines() {
                 let Ok(v) = serde_json::from_str::<Value>(line) else {
                     continue;
                 };
                 if source == Source::Codex && v["type"] == "session_meta" {
+                    let spawn = &v["payload"]["source"]["subagent"]["thread_spawn"];
+                    agent_task = spawn["agent_role"]
+                        .as_str()
+                        .or_else(|| spawn["agent_path"].as_str())
+                        .map(str::to_owned);
+                    parent_id = spawn["parent_thread_id"]
+                        .as_str()
+                        .map(|p| source.session_id(p));
+                    agent_name = spawn["agent_nickname"]
+                        .as_str()
+                        .or_else(|| spawn["agent_path"].as_str())
+                        .map(str::to_owned);
+
                     if let Some(native) = v["payload"]["id"]
                         .as_str()
                         .or_else(|| v["payload"]["session_id"].as_str())
@@ -348,6 +388,9 @@ fn peek(path: &Path, slug: &str, source: Source, mtime: SystemTime, size: u64) -
         id,
         source,
         agent: source.label().to_string(),
+        parent_id,
+        agent_name,
+        agent_task,
         path: path.to_path_buf(),
         slug: slug.to_string(),
         cwd,
@@ -377,8 +420,12 @@ mod tests {
                 .duration_since(SystemTime::UNIX_EPOCH)
                 .unwrap()
                 .as_nanos();
-            let path = std::env::temp_dir()
-                .join(format!("agentbanter-test-{}-{unique}", std::process::id()));
+            static SEQUENCE: AtomicU64 = AtomicU64::new(0);
+            let sequence = SEQUENCE.fetch_add(1, Ordering::Relaxed);
+            let path = std::env::temp_dir().join(format!(
+                "agentbanter-test-{}-{unique}-{sequence}",
+                std::process::id()
+            ));
             fs::create_dir_all(&path).unwrap();
             Self(path)
         }
@@ -387,6 +434,28 @@ mod tests {
         fn drop(&mut self) {
             let _ = fs::remove_dir_all(&self.0);
         }
+    }
+
+    #[test]
+    fn discovers_explicit_team_metadata_and_namespaces_claude_children() {
+        let temp = Temp::new();
+        let claude = temp.0.join("claude/project/parent/subagents");
+        let codex = temp.0.join("codex");
+        fs::create_dir_all(&claude).unwrap();
+        fs::create_dir_all(&codex).unwrap();
+        fs::write(claude.join("agent-child.jsonl"), "{\"type\":\"user\",\"sessionId\":\"parent\",\"agentId\":\"child\",\"cwd\":\"/project\",\"message\":{\"content\":\"Review code\"}}\n").unwrap();
+        fs::write(codex.join("rollout.jsonl"), "{\"type\":\"session_meta\",\"payload\":{\"id\":\"child\",\"source\":{\"subagent\":{\"thread_spawn\":{\"parent_thread_id\":\"parent\",\"agent_nickname\":\"Reviewer\"}}}}}\n").unwrap();
+        let store = Store::new(vec![
+            (Source::Claude, temp.0.join("claude")),
+            (Source::Codex, codex),
+        ]);
+        let all = store.scan();
+        let c = all.iter().find(|m| m.source == Source::Claude).unwrap();
+        assert_eq!(c.id, "claude-agent--parent--agent-child");
+        assert_eq!(c.parent_id.as_deref(), Some("parent"));
+        let c = all.iter().find(|m| m.source == Source::Codex).unwrap();
+        assert_eq!(c.parent_id.as_deref(), Some("codex--parent"));
+        assert_eq!(c.agent_name.as_deref(), Some("Reviewer"));
     }
 
     #[tokio::test]

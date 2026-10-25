@@ -1,0 +1,96 @@
+name: Release
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-14
+            target: aarch64-apple-darwin
+          - runner: macos-15-intel
+            target: x86_64-apple-darwin
+          - runner: ubuntu-24.04
+            target: x86_64-unknown-linux-musl
+          - runner: ubuntu-24.04-arm
+            target: aarch64-unknown-linux-musl
+    runs-on: ${{ matrix.runner }}
+    env:
+      MACOSX_DEPLOYMENT_TARGET: '11.0'
+      CARGO_TARGET_X86_64_UNKNOWN_LINUX_MUSL_LINKER: musl-gcc
+      CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_LINKER: musl-gcc
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust
+        run: |
+          rustup toolchain install stable --profile minimal --component clippy --component rustfmt
+          rustup default stable
+          rustup target add '${{ matrix.target }}'
+      - name: Linux build and desktop tools
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y musl-tools desktop-file-utils
+      - name: Validate version tag
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: python3 -c 'import os,subprocess; assert os.environ["RELEASE_TAG"] == "v" + subprocess.check_output(["python3","scripts/package.py","version"],text=True).strip()'
+      - name: Test
+        run: |
+          cargo fmt --check
+          cargo test --locked
+          cargo clippy --locked -- -D warnings
+          node tests/decoder.cjs
+          node tests/team-composer.cjs
+          python3 -m unittest discover -s tests -p 'test_*.py'
+      - name: Build
+        run: cargo build --release --locked --target '${{ matrix.target }}'
+      - name: Validate Linux launcher
+        if: runner.os == 'Linux'
+        run: desktop-file-validate packaging/agentbanter.desktop
+      - name: Smoke test packaged binary
+        env:
+          TARGET: ${{ matrix.target }}
+        run: python3 tests/packaged_smoke.py 'target/${{ matrix.target }}/release/agentbanter'
+      - name: Archive
+        run: python3 scripts/package.py archive --binary 'target/${{ matrix.target }}/release/agentbanter' --target '${{ matrix.target }}'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.target }}
+          path: dist/*
+          if-no-files-found: error
+  assemble:
+    needs: build
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Generate Homebrew formula and checksum manifest
+        run: python3 scripts/package.py formula --repository '${{ github.repository }}'
+      - name: Validate formula syntax
+        run: ruby -c dist/agentbanter.rb
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-bundle
+          path: dist/*
+      - name: Create draft release
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          if ! gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            gh release create "$RELEASE_TAG" --draft --verify-tag --generate-notes --title "AgentBanter $RELEASE_TAG"
+          fi
+          test "$(gh release view "$RELEASE_TAG" --json isDraft --jq .isDraft)" = true
+          gh release upload "$RELEASE_TAG" dist/*.tar.gz dist/SHA256SUMS dist/agentbanter.rb --clobber

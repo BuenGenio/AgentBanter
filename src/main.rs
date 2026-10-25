@@ -1,10 +1,15 @@
 mod assets;
+mod capture;
 mod chatgpt;
+mod install;
+mod launch;
 mod model;
+mod monitor;
 mod render;
 mod send;
 mod source;
 mod store;
+mod team;
 mod text;
 mod tools;
 
@@ -15,7 +20,7 @@ use axum::http::{HeaderMap, StatusCode};
 use axum::response::sse::{Event as SseEvent, KeepAlive, Sse};
 use axum::response::{Html, IntoResponse, Redirect, Response};
 use axum::routing::get;
-use clap::Parser;
+use clap::{CommandFactory, FromArgMatches, Parser, Subcommand};
 use minijinja::context;
 use model::Event;
 use render::Renderer;
@@ -36,61 +41,118 @@ use tower_http::services::ServeDir;
 #[derive(Parser)]
 #[command(version, about)]
 struct Args {
+    #[command(subcommand)]
+    command: Option<Action>,
+    /// Configuration file (default: OS config directory/agentbanter/config.json)
+    #[arg(long, global = true, value_name = "JSON")]
+    config: Option<PathBuf>,
+    /// Print the dashboard URL without launching a browser
+    #[arg(long, global = true)]
+    no_browser: bool,
     /// Port to listen on
-    #[arg(long, default_value_t = 7331)]
+    #[arg(long, global = true, default_value_t = 7331)]
     port: u16,
-    /// Address to listen on; repeatable (default: 127.0.0.1 plus this machine's Tailscale IPv4, if any)
-    #[arg(long, value_name = "IP")]
+    /// Enable local diagnostics capture (requires explicit loopback-only --bind).
+    #[arg(long, global = true)]
+    allow_capture: bool,
+    /// Address to listen on; repeatable (default: 127.0.0.1)
+    #[arg(long, global = true, value_name = "IP")]
     bind: Vec<IpAddr>,
     /// Transcript root (default: ~/.claude/projects)
-    #[arg(long)]
+    #[arg(long, global = true)]
     projects_dir: Option<PathBuf>,
     /// Sources to display (comma-separated)
     #[arg(
         long,
+        global = true,
         value_enum,
         value_delimiter = ',',
         default_value = "claude,codex,chatgpt"
     )]
     sources: Vec<Source>,
     /// Codex rollout root (default: $CODEX_HOME/sessions or ~/.codex/sessions)
-    #[arg(long)]
+    #[arg(long, global = true)]
     codex_dir: Option<PathBuf>,
     /// Imported ChatGPT transcripts (default: OS data directory/agentbanter/chatgpt)
-    #[arg(long)]
+    #[arg(long, global = true)]
     chatgpt_dir: Option<PathBuf>,
     /// Import an unzipped ChatGPT conversations.json into --chatgpt-dir, then exit
-    #[arg(long, value_name = "JSON")]
+    #[arg(long, global = true, value_name = "JSON")]
     import_chatgpt: Option<PathBuf>,
-    /// Template directory (default: ./templates, else the source tree's)
-    #[arg(long)]
+    /// Override embedded templates (hot reload)
+    #[arg(long, global = true)]
     templates: Option<PathBuf>,
-    /// Static asset directory (default: ./static, else the source tree's)
-    #[arg(long, name = "static")]
+    /// Override embedded static assets
+    #[arg(long = "static", global = true)]
     static_dir: Option<PathBuf>,
     /// How often to check transcripts for new lines, in ms
-    #[arg(long, default_value_t = 750)]
+    #[arg(long, global = true, default_value_t = 750)]
     poll_ms: u64,
-    /// Open the most recent session in the browser
-    #[arg(long)]
+    /// Open the dashboard (alias for `open` without a subcommand)
+    #[arg(long, global = true)]
     open: bool,
     /// Show a message box on session pages that continues the session via `claude -p --resume`.
     /// Anyone who can open the page can then run Claude as you, so it is off by default.
-    #[arg(long)]
+    #[arg(long, global = true)]
     allow_send: bool,
+    /// Codex CLI used to queue messages to existing threads
+    #[arg(long, global = true, value_name = "PATH", default_value = "codex")]
+    codex_bin: PathBuf,
     /// Claude Code binary used for sending
-    #[arg(long, value_name = "PATH", default_value = "claude")]
+    #[arg(long, global = true, value_name = "PATH", default_value = "claude")]
     claude_bin: PathBuf,
     /// Permission mode for sent messages (headless runs cannot ask; see `claude --help`)
-    #[arg(long, value_name = "MODE", default_value = "auto")]
+    #[arg(long, global = true, value_name = "MODE", default_value = "auto")]
     send_permission_mode: String,
     /// Write the built-in templates/ and static/ into DIR (to customise them) and exit
-    #[arg(long, value_name = "DIR")]
+    #[arg(long, global = true, value_name = "DIR")]
     dump_assets: Option<PathBuf>,
+}
+
+#[derive(Subcommand)]
+enum Action {
+    /// Start or reuse the local server and open its dashboard
+    Open,
+    /// Run the server in the foreground (also the default without a command)
+    Serve,
+    /// Install or remove the GNOME/KDE application launcher
+    Desktop {
+        #[command(subcommand)]
+        action: InstallAction,
+    },
+    /// Manage a user-level systemd service on Linux
+    Service {
+        #[command(subcommand)]
+        action: ServiceAction,
+    },
+    /// Create a persistent configuration file
+    Config {
+        #[command(subcommand)]
+        action: ConfigAction,
+    },
+}
+#[derive(Subcommand, Clone, Copy)]
+enum InstallAction {
+    Install,
+    Uninstall,
+}
+#[derive(Subcommand, Clone, Copy)]
+enum ServiceAction {
+    Install,
+    Uninstall,
+    Start,
+    Stop,
+    Status,
+}
+#[derive(Subcommand)]
+enum ConfigAction {
+    Init,
 }
 
 struct App {
     store: Arc<Store>,
+    capture: Arc<capture::Capture>,
+    monitor: monitor::Monitor,
     render: Renderer,
     sender: Option<Arc<send::Sender>>,
 }
@@ -113,18 +175,12 @@ impl<E: Into<anyhow::Error>> From<E> for AppError {
     }
 }
 
-/// An explicit flag, else `./<name>`, else the source tree's copy; `None` means use the embedded files.
-fn resolve_dir(flag: Option<PathBuf>, name: &str) -> anyhow::Result<Option<PathBuf>> {
-    if let Some(p) = flag {
+/// Installed binaries always use embedded assets unless an override is explicit.
+fn resolve_dir(flag: Option<PathBuf>, _name: &str) -> anyhow::Result<Option<PathBuf>> {
+    if let Some(p) = &flag {
         anyhow::ensure!(p.is_dir(), "{} is not a directory", p.display());
-        return Ok(Some(p));
     }
-    Ok([
-        PathBuf::from(name),
-        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(name),
-    ]
-    .into_iter()
-    .find(|p| p.is_dir()))
+    Ok(flag)
 }
 
 fn dump_assets(dir: &std::path::Path) -> anyhow::Result<()> {
@@ -149,24 +205,6 @@ fn dump_assets(dir: &std::path::Path) -> anyhow::Result<()> {
     Ok(())
 }
 
-/// This machine's Tailscale IPv4 address, if `tailscale` is installed and up.
-fn tailscale_ip() -> Option<IpAddr> {
-    let out = std::process::Command::new("tailscale")
-        .args(["ip", "-4"])
-        .output()
-        .ok()?;
-    if !out.status.success() {
-        return None;
-    }
-    String::from_utf8(out.stdout)
-        .ok()?
-        .lines()
-        .next()?
-        .trim()
-        .parse()
-        .ok()
-}
-
 async fn embedded_static(Path(path): Path<String>) -> Response {
     match assets::static_file(&path) {
         Some((ct, body)) => ([(axum::http::header::CONTENT_TYPE, ct)], body).into_response(),
@@ -176,7 +214,33 @@ async fn embedded_static(Path(path): Path<String>) -> Response {
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    let args = Args::parse();
+    let matches = Args::command().get_matches();
+    let mut args = Args::from_arg_matches(&matches)?;
+    if matches!(
+        args.command,
+        Some(Action::Config {
+            action: ConfigAction::Init
+        })
+    ) {
+        return launch::init_config(args.config.as_deref());
+    }
+    launch::configure(&mut args, &matches)?;
+    anyhow::ensure!(args.poll_ms >= 50, "--poll-ms must be at least 50");
+    anyhow::ensure!(!args.sources.is_empty(), "at least one source is required");
+    if args.command.is_none() && args.open {
+        return launch::open(&args).await;
+    }
+    match &args.command {
+        Some(Action::Open) => return launch::open(&args).await,
+        Some(Action::Desktop { action }) => return install::desktop(*action),
+        Some(Action::Service { action }) => {
+            return install::service(*action, args.config.as_deref());
+        }
+        Some(Action::Config {
+            action: ConfigAction::Init,
+        }) => return launch::init_config(args.config.as_deref()),
+        _ => {}
+    }
     if let Some(dir) = args.dump_assets {
         return dump_assets(&dir);
     }
@@ -222,33 +286,50 @@ async fn main() -> anyhow::Result<()> {
 
     let store = Store::new(roots);
     store.spawn_tailer(Duration::from_millis(args.poll_ms));
+    anyhow::ensure!(
+        !args.allow_capture || (!args.bind.is_empty() && args.bind.iter().all(IpAddr::is_loopback)),
+        "--allow-capture requires explicit loopback-only --bind 127.0.0.1"
+    );
     let app = Arc::new(App {
+        capture: capture::Capture::new(args.allow_capture),
+        monitor: monitor::Monitor::default(),
         store,
         render: Renderer::new(templates.clone()),
         sender: args
             .allow_send
-            .then(|| send::Sender::new(args.claude_bin, args.send_permission_mode)),
+            .then(|| send::Sender::new(args.claude_bin, args.codex_bin, args.send_permission_mode)),
     });
 
     let router = Router::new()
         .route("/", get(index))
+        .route(
+            "/healthz",
+            get(|| async {
+                Json(json!({"app":"agentbanter", "version":env!("CARGO_PKG_VERSION"), "pid":std::process::id()}))
+            }),
+        )
         .route("/latest", get(latest))
+        .route("/capture", get(capture::page))
+        .route("/capture/records", get(capture::records))
+        .route("/capture/control", axum::routing::post(capture::control))
         .route("/s/{id}", get(session))
         .route("/s/{id}/events", get(events))
+        .route("/s/{id}/processes", get(monitor::inspect))
+        .route("/s/{id}/team", get(session_team))
         .route("/s/{id}/send", get(send_status).post(send_message));
     let router = match &static_dir {
         Some(dir) => router.nest_service("/static", ServeDir::new(dir)),
         None => router.route("/static/{*path}", get(embedded_static)),
     };
-    let router = router.with_state(app);
+    let router = router
+        .layer(axum::middleware::from_fn_with_state(
+            app.clone(),
+            capture::http_trace,
+        ))
+        .with_state(app);
 
     let ips = if args.bind.is_empty() {
-        let mut ips = vec![IpAddr::V4(Ipv4Addr::LOCALHOST)];
-        match tailscale_ip() {
-            Some(ip) => ips.push(ip),
-            None => eprintln!("tailscale: no IPv4 address found, listening on 127.0.0.1 only"),
-        }
-        ips
+        vec![IpAddr::V4(Ipv4Addr::LOCALHOST)]
     } else {
         args.bind
     };
@@ -258,7 +339,7 @@ async fn main() -> anyhow::Result<()> {
         let listener = tokio::net::TcpListener::bind(addr)
             .await
             .map_err(|e| anyhow::anyhow!("cannot listen on {addr}: {e}"))?;
-        listeners.push((addr, listener));
+        listeners.push((listener.local_addr()?, listener));
     }
     let urls: Vec<String> = listeners
         .iter()
@@ -276,14 +357,15 @@ async fn main() -> anyhow::Result<()> {
         shown(&templates),
         shown(&static_dir)
     );
-    if args.open {
-        let _ = std::process::Command::new("xdg-open")
-            .arg(format!("{}/latest", urls[0]))
-            .spawn();
-    }
     let mut servers = tokio::task::JoinSet::new();
     for (_, listener) in listeners {
         servers.spawn(axum::serve(listener, router.clone()).into_future());
+    }
+    if args.open
+        && !args.no_browser
+        && let Err(error) = launch::browser(&urls[0]).await
+    {
+        eprintln!("{error:#} · open {} manually", urls[0]);
     }
     // Any listener stopping (only on error) ends the process.
     if let Some(res) = servers.join_next().await {
@@ -299,10 +381,7 @@ struct ProjectGroup {
     sessions: Vec<SessionMeta>,
 }
 
-async fn index(State(app): State<Arc<App>>) -> Result<Html<String>, AppError> {
-    let store = app.store.clone();
-    let metas = tokio::task::spawn_blocking(move || store.scan()).await?;
-    let total = metas.len();
+fn group_sessions(metas: Vec<SessionMeta>) -> Vec<ProjectGroup> {
     let mut groups: Vec<ProjectGroup> = Vec::new();
     for m in metas {
         match groups.iter_mut().find(|g| g.cwd == m.cwd) {
@@ -314,6 +393,14 @@ async fn index(State(app): State<Arc<App>>) -> Result<Html<String>, AppError> {
             }),
         }
     }
+    groups
+}
+
+async fn index(State(app): State<Arc<App>>) -> Result<Html<String>, AppError> {
+    let store = app.store.clone();
+    let metas = tokio::task::spawn_blocking(move || store.scan()).await?;
+    let total = metas.len();
+    let groups = group_sessions(metas);
     Ok(Html(app.render.render(
         "index.html",
         context! { projects => groups, total },
@@ -334,22 +421,40 @@ async fn session(
     Path(id): Path<String>,
 ) -> Result<Html<String>, AppError> {
     let loaded = app.store.load(&id).await?;
+    let store = app.store.clone();
+    let metas = tokio::task::spawn_blocking(move || store.scan()).await?;
+    let total = metas.len();
+    let groups = group_sessions(metas);
     let s = loaded.session.read().unwrap();
     let html = app.render.render(
         "session.html",
         context! {
+            projects => groups, total, selected => id,
             s => s.view(),
             stats => s.session_stats(),
             blocks => s.blocks(),
             decisions => s.decisions(),
             seq => s.events.len(),
-            can_send => app.sender.is_some() && loaded.source == Source::Claude,
+            can_send => app.sender.is_some() && loaded.source != Source::Chatgpt,
+
             agent => loaded.source.label(),
             is_import => loaded.source == Source::Chatgpt,
             generation => loaded.generation.load(Ordering::SeqCst),
         },
     )?;
     Ok(Html(html))
+}
+
+async fn session_team(
+    State(app): State<Arc<App>>,
+    Path(id): Path<String>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    let store = app.store.clone();
+    let metas = tokio::task::spawn_blocking(move || store.scan()).await?;
+    if !metas.iter().any(|m| m.id == id) {
+        return Err(anyhow::anyhow!("session not found").into());
+    }
+    Ok(Json(team::view(&metas, &id)))
 }
 
 #[derive(Deserialize)]
@@ -366,10 +471,10 @@ fn send_error(code: StatusCode, msg: impl Into<String>) -> Response {
 }
 
 async fn send_status(State(app): State<Arc<App>>, Path(id): Path<String>) -> Response {
-    if id.starts_with("codex--") || id.starts_with("chatgpt--") {
+    if id.starts_with("chatgpt--") {
         return send_error(
             StatusCode::FORBIDDEN,
-            "sending is only supported for Claude sessions",
+            "imported conversations cannot receive messages",
         );
     }
     match &app.sender {
@@ -389,10 +494,10 @@ async fn send_message(
     headers: HeaderMap,
     body: Option<Json<SendBody>>,
 ) -> Response {
-    if id.starts_with("codex--") || id.starts_with("chatgpt--") {
+    if id.starts_with("chatgpt--") {
         return send_error(
             StatusCode::FORBIDDEN,
-            "sending is only supported for Claude sessions",
+            "imported conversations cannot receive messages",
         );
     }
     let Some(sender) = &app.sender else {
@@ -418,6 +523,9 @@ async fn send_message(
         );
     };
     let text = body.text.trim().to_string();
+    if text.len() > 32_000 {
+        return send_error(StatusCode::BAD_REQUEST, "message exceeds 32,000 bytes");
+    }
     if text.is_empty() {
         return send_error(StatusCode::BAD_REQUEST, "empty message");
     }
@@ -428,6 +536,18 @@ async fn send_message(
     else {
         return send_error(StatusCode::NOT_FOUND, "session not found");
     };
+    if !team::can_message(&meta) {
+        return send_error(
+            StatusCode::FORBIDDEN,
+            "This child transcript cannot receive direct messages. Select its parent conversation.",
+        );
+    }
+    if meta.source == Source::Codex {
+        return match sender.queue_codex(&id, PathBuf::from(&meta.cwd), text) {
+            Ok(()) => (StatusCode::ACCEPTED, Json(sender.status(&id))).into_response(),
+            Err(e) => send_error(StatusCode::CONFLICT, e.to_string()),
+        };
+    }
     let recent = (chrono::Utc::now() - meta.mtime).num_seconds() < 60;
     let ours = matches!(sender.status(&id), send::SendStatus::Done { .. });
     let fork = send::held_elsewhere(&id) || (recent && !ours);
@@ -494,11 +614,17 @@ fn render_since(app: &App, loaded: &Loaded, from: usize) -> Vec<(usize, String)>
     let mut out = Vec::new();
     for i in from..s.events.len() {
         let payload = match &s.events[i] {
+            Event::Metrics { prompt, .. } => json!({
+                "kind": "stats", "prompt": s.prompt_id(*prompt),
+                "chips": r("partials/chips.html", context! { stats => s.prompt_stats(*prompt) }),
+                "header": r("partials/header_stats.html", context! { stats => s.session_stats() }),
+                "dcount": s.decisions().len(),
+            }),
             Event::Tool(t) => {
                 json!({ "kind": "tool", "step": t.step_id, "html": r("partials/tool.html", context! { tool => t }) })
             }
             Event::ToolResult(rv) => json!({
-                "kind": "tool_result", "tool": rv.tool_id, "ok": rv.ok, "detail": rv.detail,
+                "kind": "tool_result", "tool": rv.tool_id, "ok": rv.ok, "detail": rv.detail, "raw": rv.raw,
                 "html": r("partials/result.html", context! { r => rv }),
             }),
             Event::Decision(d) => json!({

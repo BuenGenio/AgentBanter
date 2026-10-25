@@ -18,6 +18,9 @@ use tokio::process::Command;
 #[serde(tag = "state", rename_all = "snake_case")]
 pub enum SendStatus {
     Idle,
+    Queued {
+        session: String,
+    },
     /// `session` is where the reply is being written: the same id, or the fork's once known.
     Running {
         session: Option<String>,
@@ -32,14 +35,16 @@ pub enum SendStatus {
 
 pub struct Sender {
     pub claude_bin: PathBuf,
+    pub codex_bin: PathBuf,
     pub permission_mode: String,
     status: Mutex<HashMap<String, SendStatus>>,
 }
 
 impl Sender {
-    pub fn new(claude_bin: PathBuf, permission_mode: String) -> Arc<Self> {
+    pub fn new(claude_bin: PathBuf, codex_bin: PathBuf, permission_mode: String) -> Arc<Self> {
         Arc::new(Self {
             claude_bin,
+            codex_bin,
             permission_mode,
             status: Mutex::new(HashMap::new()),
         })
@@ -52,6 +57,43 @@ impl Sender {
             .get(id)
             .cloned()
             .unwrap_or(SendStatus::Idle)
+    }
+
+    pub fn queue_codex(
+        self: &Arc<Self>,
+        id: &str,
+        cwd: PathBuf,
+        text: String,
+    ) -> anyhow::Result<()> {
+        {
+            let mut status = self.status.lock().unwrap();
+            if matches!(status.get(id), Some(SendStatus::Running { .. })) {
+                anyhow::bail!("a message to this recipient is still being submitted");
+            }
+            status.insert(
+                id.into(),
+                SendStatus::Running {
+                    session: Some(id.into()),
+                },
+            );
+        }
+        let me = self.clone();
+        let id = id.to_owned();
+        tokio::spawn(async move {
+            let native = id.strip_prefix("codex--").unwrap_or(&id);
+            let mut cmd = Command::new(&me.codex_bin);
+            cmd.args(["queue", "--thread", native, "--message", &text])
+                .current_dir(cwd)
+                .kill_on_drop(true);
+            let status = match tokio::time::timeout(std::time::Duration::from_secs(30), cmd.output()).await {
+                Ok(Ok(out)) if out.status.success() => SendStatus::Queued { session: id.clone() },
+                Ok(Ok(out)) => SendStatus::Failed { error: format!("Codex did not confirm queuing: {}", String::from_utf8_lossy(&out.stderr).chars().take(1000).collect::<String>()) },
+                Ok(Err(e)) => SendStatus::Failed { error: format!("Cannot run Codex: {e}") },
+                Err(_) => SendStatus::Failed { error: "Queue confirmation timed out. Delivery is uncertain; check the target conversation before retrying.".into() },
+            };
+            me.status.lock().unwrap().insert(id, status);
+        });
+        Ok(())
     }
 
     /// Start `claude` for this session unless one we started is still running.
@@ -178,4 +220,46 @@ pub fn held_elsewhere(id: &str) -> bool {
             }
         })
     })
+}
+
+#[cfg(all(test, unix))]
+mod tests {
+    use super::*;
+    use std::os::unix::fs::PermissionsExt;
+    #[tokio::test]
+    async fn codex_queue_preserves_message_and_reports_acceptance() {
+        let dir =
+            std::env::temp_dir().join(format!("agentbanter-send-test-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let script = dir.join("codex-mock");
+        std::fs::write(&script, "#!/bin/sh\n[ \"$1\" = queue ] && [ \"$2\" = --thread ] && [ \"$3\" = thread-123 ] && [ \"$4\" = --message ] || exit 7\nprintf '%s' \"$5\" > message.txt\n").unwrap();
+        std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o700)).unwrap();
+        let sender = Sender::new("unused".into(), script, "auto".into());
+        let text = "Question with 'quotes'\nand $(literal text)";
+        sender
+            .queue_codex("codex--thread-123", dir.clone(), text.into())
+            .unwrap();
+        tokio::time::timeout(std::time::Duration::from_secs(3), async {
+            loop {
+                if !matches!(
+                    sender.status("codex--thread-123"),
+                    SendStatus::Running { .. }
+                ) {
+                    break;
+                }
+                tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+            }
+        })
+        .await
+        .unwrap();
+        assert!(matches!(
+            sender.status("codex--thread-123"),
+            SendStatus::Queued { .. }
+        ));
+        assert_eq!(
+            std::fs::read_to_string(dir.join("message.txt")).unwrap(),
+            text
+        );
+        std::fs::remove_dir_all(dir).unwrap();
+    }
 }

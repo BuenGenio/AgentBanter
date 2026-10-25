@@ -8,7 +8,7 @@ use chrono::{DateTime, Local, Utc};
 use regex::Regex;
 use serde::Serialize;
 use serde_json::Value;
-use std::collections::{BTreeSet, HashSet};
+use std::collections::{BTreeSet, HashMap, HashSet};
 use std::sync::LazyLock;
 
 static DECISION_DOC: LazyLock<Regex> =
@@ -30,6 +30,7 @@ pub struct ToolView {
 
 #[derive(Serialize, Clone, Debug)]
 pub struct ResultView {
+    pub raw: String,
     pub tool_id: String,
     pub t: String,
     pub ok: bool,
@@ -52,6 +53,10 @@ pub struct DecisionView {
 #[derive(Serialize, Clone, Debug)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum Event {
+    Metrics {
+        prompt: usize,
+        data: Value,
+    },
     Prompt {
         id: String,
         ts: String,
@@ -118,6 +123,7 @@ pub enum Block {
 
 #[derive(Serialize, Clone, Debug, Default)]
 pub struct PromptStats {
+    pub activity: ActivityStats,
     pub tools: usize,
     pub commands: usize,
     pub files: Vec<String>,
@@ -125,6 +131,19 @@ pub struct PromptStats {
     pub decisions: usize,
     pub errors: usize,
     pub duration: String,
+}
+
+#[derive(Serialize, Clone, Debug, Default)]
+pub struct ActivityStats {
+    pub available: bool,
+    pub total: Option<String>,
+    pub first_token: Option<String>,
+    pub messages: Option<String>,
+    pub usage: Option<Value>,
+}
+
+fn seconds(ms: u64) -> String {
+    format!("{:.3} s", ms as f64 / 1000.0)
 }
 
 #[derive(Serialize, Clone, Debug, Default)]
@@ -162,6 +181,8 @@ pub struct Session {
     cur_step: Option<String>,
     prompt_count: usize,
     seen_decisions: HashSet<String>,
+    active_turn: Option<String>,
+    turn_prompts: HashMap<String, usize>,
 }
 
 fn parse_ts(v: &Value) -> Option<DateTime<Utc>> {
@@ -251,6 +272,24 @@ impl Session {
         }
         let ts = parse_ts(v);
         match v["type"].as_str().unwrap_or("") {
+            "turn_start" => {
+                self.active_turn = v["turn_id"].as_str().map(str::to_owned);
+            }
+            "turn_metrics" => {
+                if let Some(prompt) = v["turn_id"]
+                    .as_str()
+                    .and_then(|id| self.turn_prompts.get(id))
+                    .copied()
+                {
+                    self.push(
+                        Event::Metrics {
+                            prompt,
+                            data: v["metrics"].clone(),
+                        },
+                        ts,
+                    );
+                }
+            }
             "ai-title" => {
                 if let Some(t) = v["aiTitle"].as_str() {
                     self.title = Some(t.to_string());
@@ -284,7 +323,10 @@ impl Session {
             n: self.prompt_count,
             html: markdown(&clean),
         };
-        self.push(ev, ts);
+        let idx = self.push(ev, ts);
+        if let Some(turn) = &self.active_turn {
+            self.turn_prompts.entry(turn.clone()).or_insert(idx);
+        }
     }
 
     fn ingest_tool_result(&mut self, it: &Value, rec: &Value, ts: Option<DateTime<Utc>>) {
@@ -329,7 +371,7 @@ impl Session {
             };
             detail = truncate(format!("{stdout}\n{stderr}").trim(), 6000);
         } else {
-            let text = content_text(&it["content"]);
+            let text = tools::readable_output(&content_text(&it["content"]));
             let fl = first_line(&text);
             summary = if fl.is_empty() {
                 "done".into()
@@ -339,6 +381,7 @@ impl Session {
             detail = truncate(&text, 6000);
         }
         let ev = Event::ToolResult(ResultView {
+            raw: content_text(&it["content"]),
             tool_id,
             t: fmt_t(ts),
             ok,
@@ -555,7 +598,7 @@ impl Session {
                 tools: Vec::new(),
             },
             Event::Decision(d) => Block::Decision(d.clone()),
-            Event::Tool(_) | Event::ToolResult(_) => return None,
+            Event::Tool(_) | Event::ToolResult(_) | Event::Metrics { .. } => return None,
         })
     }
 
@@ -650,9 +693,37 @@ impl Session {
                 _ => {}
             }
         }
+        let mut message_ms: Option<u64> = None;
+        for event in &self.events {
+            if let Event::Metrics { prompt, data } = event {
+                if *prompt != i {
+                    continue;
+                }
+                if let Some(ms) = data["duration_ms"].as_u64() {
+                    st.activity.total = Some(seconds(ms));
+                }
+                if let Some(ms) = data["first_token_ms"].as_u64() {
+                    st.activity.first_token = Some(seconds(ms));
+                }
+                if let Some(ms) = data["message_ms"].as_u64() {
+                    message_ms = Some(message_ms.unwrap_or(0).saturating_add(ms));
+                }
+                if data["usage"].is_object() {
+                    st.activity.usage = Some(data["usage"].clone());
+                }
+            }
+        }
+        st.activity.messages = message_ms.map(seconds);
+        st.activity.available = st.activity.total.is_some()
+            || st.activity.first_token.is_some()
+            || st.activity.messages.is_some()
+            || st.activity.usage.is_some();
         st.files = files.into_iter().collect();
         if let (Some(a), Some(b)) = (self.ts[i], last_ts) {
             st.duration = fmt_duration((b - a).num_seconds());
+        }
+        if let Some(total) = &st.activity.total {
+            st.duration = total.clone();
         }
         st
     }

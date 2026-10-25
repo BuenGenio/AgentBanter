@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=AgentBanter
+Comment=Inspect agent conversations and activity
+Exec=agentbanter open
+Icon=agentbanter
+Terminal=false
+Categories=Development;
+Keywords=AI;agents;Codex;Claude;conversations;
+StartupNotify=false

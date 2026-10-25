@@ -7,7 +7,7 @@
       <span class="result" data-slot>{% if tool.result %}{% with r = tool.result %}{% include "partials/result.html" %}{% endwith %}{% endif %}</span>
       <time datetime="{{ tool.ts }}">{{ tool.t }}</time>
     </summary>
-    {% if tool.detail %}<pre class="detail">{{ tool.detail }}</pre>{% endif %}
-    <pre class="rdetail" data-rslot>{% if tool.result %}{{ tool.result.detail }}{% endif %}</pre>
+    {% if tool.detail %}<div class="input-inspector"><div class="code-caption">INPUT</div><pre class="detail"><code class="{{ 'language-javascript' if tool.name == 'exec' else 'language-bash' if tool.icon == 'bash' else '' }}">{{ tool.detail }}</code></pre></div>{% endif %}
+    <div class="output-inspector" data-rslot>{% if tool.result %}<pre class="rdetail">{{ tool.result.detail }}</pre><script type="application/json" class="inspector-data">{{ tool.result.raw|tojson }}</script>{% endif %}</div>
   </details>
 </li>

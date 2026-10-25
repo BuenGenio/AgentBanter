@@ -1,35 +1,16 @@
 {% extends "base.html" %}
-{% block title %}Sessions · AgentBanter{% endblock %}
+{% block title %}Workbench · AgentBanter{% endblock %}
 {% block body %}
-<header class="top">
-  <div class="nav-glass" aria-hidden="true"></div>
-  <h1>AgentBanter</h1>
-  <div class="meta"><span>{{ total }} sessions</span><a class="btn" href="/latest">Follow latest →</a></div>
-</header>
-<main class="index">
-{% if not projects %}
-  <section class="project"><h2>No conversations found</h2>
-  <p>AgentBanter reads local Codex and Claude Code logs. To add ChatGPT chats, import an unzipped data export:</p>
-  <pre>agentbanter --import-chatgpt /path/to/conversations.json</pre>
+<main class="workspace empty-workspace">
+  <div class="bench-label">WORKBENCH / READY <span class="lamp-label">TASK LIGHT · 5000K</span></div>
+  <section class="empty-bench">
+    <div class="bench-emblem" aria-hidden="true">↳</div>
+    <span class="eyebrow">A LITTLE SPACE TO THINK</span>
+    <h1>Put a conversation<br>on the bench.</h1>
+    <p>Follow the thread. Open up the tools.<br>See how an answer came together.</p>
+    {% if projects %}<a class="bench-button" href="/latest">Open latest conversation <span>↗</span></a>{% else %}<p>Start a local Codex or Claude Code conversation,<br>or import a ChatGPT export to get started.</p>{% endif %}
+    <div class="bench-caption">PROMPTS &nbsp; / &nbsp; TOOLS &nbsp; / &nbsp; REASONING &nbsp; / &nbsp; DECISIONS</div>
   </section>
-{% endif %}
-{% for p in projects %}
-  <section class="project">
-    <h2 title="{{ p.cwd }}">{{ p.project }} <span class="path">{{ p.cwd }}</span></h2>
-    <ul class="sessions">
-    {% for m in p.sessions %}
-      <li class="{{ 'live' if m.live }}">
-        <a href="/s/{{ m.id }}">
-          <span class="dot"></span>
-          <span class="title">{{ m.title }}</span>
-          <span class="branch">{{ m.agent }}{% if m.source == "chatgpt" %} · imported{% endif %}</span>
-          <span class="age">{{ m.age }}</span>
-          <span class="size">{{ m.size }}</span>
-        </a>
-      </li>
-    {% endfor %}
-    </ul>
-  </section>
-{% endfor %}
+  <span class="bench-coordinate">AB—01 &nbsp; CONVERSATION INSPECTION STATION</span>
 </main>
 {% endblock %}

@@ -4,3 +4,19 @@
 {% if stats.reasoning %}<span class="chip">∴ {{ stats.reasoning }} thought{{ 's' if stats.reasoning != 1 }}</span>{% endif %}
 {% if stats.decisions %}<span class="chip accent">◆ {{ stats.decisions }} decision{{ 's' if stats.decisions != 1 }}</span>{% endif %}
 {% if stats.errors %}<span class="chip err">✕ {{ stats.errors }} failed</span>{% endif %}
+{% if stats.activity.available %}
+<details class="activity-details">
+  <summary>Response activity</summary>
+  <dl>
+    {% if stats.activity.first_token is not none %}<div><dt>Time to first token</dt><dd>{{ stats.activity.first_token }}</dd></div>{% endif %}
+    {% if stats.activity.messages is not none %}<div><dt>Assistant message time</dt><dd>{{ stats.activity.messages }}</dd></div>{% endif %}
+    {% if stats.activity.total is not none %}<div><dt>Total turn time</dt><dd>{{ stats.activity.total }}</dd></div>{% endif %}
+    {% if stats.activity.usage %}
+      {% for key, label in [('input_tokens', 'Input tokens'), ('cached_input_tokens', 'Cached input tokens'), ('output_tokens', 'Output tokens'), ('reasoning_output_tokens', 'Reasoning tokens')] %}
+        {% if stats.activity.usage[key] is defined and stats.activity.usage[key] is not none %}<div><dt>{{ label }}</dt><dd>{{ stats.activity.usage[key] }}</dd></div>{% endif %}
+      {% endfor %}
+    {% endif %}
+  </dl>
+  <p>Recorded timings may overlap. Message time includes all assistant messages in this turn. Cached tokens are part of the input count. The log does not separate network, queue, and model processing time.</p>
+</details>
+{% endif %}

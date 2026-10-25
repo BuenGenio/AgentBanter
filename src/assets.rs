@@ -3,6 +3,11 @@
 //! so the look can still be edited live.
 
 pub const TEMPLATES: &[(&str, &str)] = &[
+    ("capture.html", include_str!("../templates/capture.html")),
+    (
+        "partials/sidebar.html",
+        include_str!("../templates/partials/sidebar.html"),
+    ),
     ("base.html", include_str!("../templates/base.html")),
     ("index.html", include_str!("../templates/index.html")),
     ("session.html", include_str!("../templates/session.html")),
@@ -54,6 +59,51 @@ pub const TEMPLATES: &[(&str, &str)] = &[
 
 /// (path, content type, body)
 pub const STATIC: &[(&str, &str, &str)] = &[
+    (
+        "monitor.js",
+        "text/javascript; charset=utf-8",
+        include_str!("../static/monitor.js"),
+    ),
+    (
+        "decoder.js",
+        "text/javascript; charset=utf-8",
+        include_str!("../static/decoder.js"),
+    ),
+    (
+        "vendor/acorn.js",
+        "text/javascript; charset=utf-8",
+        include_str!("../static/vendor/acorn.js"),
+    ),
+    (
+        "vendor/acorn.LICENSE",
+        "text/plain",
+        include_str!("../static/vendor/acorn.LICENSE"),
+    ),
+    (
+        "vendor/highlight.min.js",
+        "text/javascript; charset=utf-8",
+        include_str!("../static/vendor/highlight.min.js"),
+    ),
+    (
+        "vendor/highlight.LICENSE",
+        "text/plain",
+        include_str!("../static/vendor/highlight.LICENSE"),
+    ),
+    (
+        "inspector.js",
+        "text/javascript; charset=utf-8",
+        include_str!("../static/inspector.js"),
+    ),
+    (
+        "capture.js",
+        "text/javascript; charset=utf-8",
+        include_str!("../static/capture.js"),
+    ),
+    (
+        "sidebar.js",
+        "text/javascript; charset=utf-8",
+        include_str!("../static/sidebar.js"),
+    ),
     (
         "app.css",
         "text/css; charset=utf-8",

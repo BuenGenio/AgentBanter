@@ -1,0 +1,22 @@
+name: Checks
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install desktop validator
+        run: sudo apt-get update && sudo apt-get install -y desktop-file-utils
+      - run: |
+          rustup toolchain install stable --profile minimal --component clippy --component rustfmt
+          rustup default stable
+          cargo fmt --check
+          cargo test --locked
+          cargo clippy --locked -- -D warnings
+          node tests/decoder.cjs
+          node tests/team-composer.cjs
+          python3 -m unittest discover -s tests -p 'test_*.py'
+          cargo build --release --locked
+          python3 tests/packaged_smoke.py target/release/agentbanter

@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block title %}Traffic inspector · AgentBanter{% endblock %}
+{% block body %}
+<main class="workspace capture-workspace" data-enabled="{{ 'true' if capture_enabled else 'false' }}">
+<header class="bench-header">
+  <div class="bench-label">SIGNAL ANALYSIS / LIVE CAPTURE <span class="lamp-label">TASK LIGHT · 5000K</span></div>
+  <h1>Under the hood.</h1>
+  <p class="capture-intro">Follow the events, connections, and signals behind the conversation.</p>
+  <div class="capture-actions"><button id="capture-start" class="bench-button" {% if not capture_enabled %}disabled{% endif %}>● Start capture</button><button id="capture-stop" disabled>■ Stop</button><button id="capture-pause">Pause view</button><button id="capture-clear">Clear</button><button id="capture-export">Export JSON</button><span id="capture-state" role="status">Idle</span></div>
+</header>
+<div class="capture-content">
+  {% if not capture_enabled %}<p class="capture-warning">Capture is disabled. Start AgentBanter with <code>--bind 127.0.0.1 --allow-capture</code> to enable local diagnostics.</p>{% endif %}
+  <div class="coverage-grid">
+    <div><b>Internal</b><span>New transcript records + dashboard HTTP</span></div>
+    <div><b>Network</b><span>TCP/UDP sockets · packet summaries if permitted</span></div>
+    <div><b>IPC</b><span>Unix socket inventory · not message payloads</span></div>
+  </div>
+  <details class="capture-scope"><summary>Capture coverage & limits</summary><p>Captures new records from all configured local conversations after Start. Socket inventory is sampled every five seconds; short-lived sockets may be missed. Packet summaries require OS capture permissions. TLS, Mach/XPC message payloads, and encrypted reasoning are unavailable. Known credential fields are redacted; free-form text may still contain sensitive data. No request bodies or external application logs are intercepted. Captures stay in memory in a 4,000-record ring buffer; export saves the records currently retained in this browser. AgentBanter inspector polling is excluded.</p></details>
+  <p id="packet-status" class="packet-status" role="status">Packet capture has not started.</p>
+  <div class="capture-filters"><label>Channel <select id="capture-channel"><option value="">All channels</option><option>transcript</option><option>http</option><option>internal</option><option>network</option><option>ipc</option><option>packet</option></select></label><input id="capture-filter" type="search" aria-label="Filter captured records" placeholder="Filter by event, process, endpoint, or conversation…"><span id="capture-count">0 records</span></div>
+  <div class="packet-table-wrap"><table class="packet-table"><thead><tr><th>No.</th><th>Observed at</th><th>Channel</th><th>Event</th><th>Source / endpoint</th></tr></thead><tbody id="capture-rows"></tbody></table><p id="capture-empty">Start capture to watch new activity arrive.</p></div>
+  <section class="packet-detail"><div class="tray-label">RECORD INSPECTOR <span id="record-label"></span></div><div id="record-inspector"><p>Select a record to inspect its fields.</p></div></section>
+</div>
+</main>
+<script src="/static/capture.js" defer></script>
+{% endblock %}
