@@ -6,6 +6,7 @@ mod launch;
 mod model;
 mod monitor;
 mod render;
+mod search;
 mod send;
 mod source;
 mod store;
@@ -153,6 +154,7 @@ struct App {
     store: Arc<Store>,
     capture: Arc<capture::Capture>,
     monitor: monitor::Monitor,
+    search: Arc<search::Search>,
     render: Renderer,
     sender: Option<Arc<send::Sender>>,
 }
@@ -293,6 +295,7 @@ async fn main() -> anyhow::Result<()> {
     let app = Arc::new(App {
         capture: capture::Capture::new(args.allow_capture),
         monitor: monitor::Monitor::default(),
+        search: Arc::new(search::Search::default()),
         store,
         render: Renderer::new(templates.clone()),
         sender: args
@@ -309,6 +312,7 @@ async fn main() -> anyhow::Result<()> {
             }),
         )
         .route("/latest", get(latest))
+        .route("/search", get(search::query))
         .route("/capture", get(capture::page))
         .route("/capture/records", get(capture::records))
         .route("/capture/control", axum::routing::post(capture::control))
@@ -379,18 +383,59 @@ struct ProjectGroup {
     cwd: String,
     project: String,
     sessions: Vec<SessionMeta>,
+    tree: Vec<serde_json::Value>,
 }
 
 fn group_sessions(metas: Vec<SessionMeta>) -> Vec<ProjectGroup> {
+    use std::collections::{HashMap, HashSet};
+    fn node(
+        meta: &SessionMeta,
+        all: &[SessionMeta],
+        seen: &mut HashSet<String>,
+        depth: usize,
+    ) -> serde_json::Value {
+        seen.insert(meta.id.clone());
+        let mut children = Vec::new();
+        if depth < 32 {
+            for child in all
+                .iter()
+                .filter(|m| m.parent_id.as_deref() == Some(meta.id.as_str()))
+            {
+                if !seen.contains(&child.id) {
+                    children.push(node(child, all, seen, depth + 1));
+                }
+            }
+        }
+        let mut value = serde_json::to_value(meta).unwrap();
+        value["children"] = serde_json::Value::Array(children);
+        value
+    }
     let mut groups: Vec<ProjectGroup> = Vec::new();
-    for m in metas {
-        match groups.iter_mut().find(|g| g.cwd == m.cwd) {
-            Some(g) => g.sessions.push(m),
-            None => groups.push(ProjectGroup {
+    let mut by_cwd = HashMap::new();
+    for m in &metas {
+        let index = *by_cwd.entry(m.cwd.clone()).or_insert_with(|| {
+            let i = groups.len();
+            groups.push(ProjectGroup {
                 cwd: m.cwd.clone(),
                 project: m.project.clone(),
-                sessions: vec![m],
-            }),
+                sessions: Vec::new(),
+                tree: Vec::new(),
+            });
+            i
+        });
+        groups[index].sessions.push(m.clone());
+    }
+    let ids: HashSet<_> = metas.iter().map(|m| m.id.as_str()).collect();
+    let mut seen = HashSet::new();
+    let roots = metas
+        .iter()
+        .filter(|m| m.parent_id.as_deref().is_none_or(|p| !ids.contains(p)))
+        .chain(metas.iter());
+    for m in roots {
+        if !seen.contains(&m.id) {
+            groups[by_cwd[&m.cwd]]
+                .tree
+                .push(node(m, &metas, &mut seen, 0));
         }
     }
     groups
@@ -651,4 +696,52 @@ fn render_since(app: &App, loaded: &Loaded, from: usize) -> Vec<(usize, String)>
         out.push((last, stats.to_string()));
     }
     out
+}
+
+#[cfg(test)]
+mod drawer_tests {
+    use super::*;
+    #[test]
+    fn hierarchy_keeps_cross_project_children_once_and_bounds_cycles() {
+        let make = |id: &str, parent: Option<&str>, cwd: &str| SessionMeta {
+            id: id.into(),
+            source: Source::Codex,
+            agent: "Codex".into(),
+            parent_id: parent.map(str::to_owned),
+            agent_name: None,
+            agent_task: None,
+            path: Default::default(),
+            slug: String::new(),
+            cwd: cwd.into(),
+            project: cwd.into(),
+            title: id.into(),
+            mtime: chrono::Utc::now(),
+            age: String::new(),
+            size: String::new(),
+            live: false,
+        };
+        let groups = group_sessions(vec![
+            make("child", Some("root"), "/other"),
+            make("root", None, "/project"),
+            make("a", Some("b"), "/cycle"),
+            make("b", Some("a"), "/cycle"),
+            make("orphan", Some("missing"), "/project"),
+        ]);
+        let root = groups.iter().find(|g| g.cwd == "/project").unwrap();
+        assert_eq!(root.tree[0]["id"], "root");
+        assert_eq!(root.tree[0]["children"][0]["id"], "child");
+        assert_eq!(root.tree[1]["id"], "orphan");
+        assert!(
+            groups
+                .iter()
+                .find(|g| g.cwd == "/other")
+                .unwrap()
+                .tree
+                .is_empty()
+        );
+        let cycle = groups.iter().find(|g| g.cwd == "/cycle").unwrap();
+        assert_eq!(cycle.tree.len(), 1);
+        assert_eq!(cycle.tree[0]["children"].as_array().unwrap().len(), 1);
+        assert_eq!(cycle.tree[0]["children"][0]["children"], json!([]));
+    }
 }

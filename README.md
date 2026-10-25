@@ -78,7 +78,13 @@ Process cards offer **View in conversation** when an executable path matches a r
 
 ## Workbench and traffic inspector
 
-The workbench keeps conversations in a searchable left drawer with the selected stream and decisions tray on the right. Physical-style RGB and task-light fixtures illuminate the canvas. Click the temperature badge on the task lamp to open its 2200–6500 K slider (default 5000 K); the setting persists locally and reduced-motion preferences stop the rainbow animation.
+The workbench keeps conversations in a left drawer with the selected stream and instruments on the right. Project and conversation groups expand on hover; recorded child agents stay nested under their parents. Moving into a descendant keeps its parent open. Keyboard focus opens the same groups. Expandable blocks have an arrow, an Expand/Collapse label, and a numbered nesting level; their borders progress from cool violet to warm red as depth increases.
+
+The search below the top LED scans recorded blocks across conversations, with links to the exact message or tool run. Choose **Filter conversations** to narrow the drawer while keeping parent context. Its query and mode survive navigation in the same browser tab. The task lamp has a separate conversation search: find in context or show matching blocks only, choose a block type (including commands and inferred decisions), and select an agent from recorded family relationships. Child-agent results link to their own conversation. Search includes collapsed tool inputs and results. Literal search is case-insensitive by default; regular expressions are optional, with a case-sensitive option in conversation search. Use **⌘/Ctrl F** for conversation search, **⌘/Ctrl Shift F** for global search, and **/** for global search. New transcript activity refreshes active conversation searches without scrolling away from the inspected block.
+
+Search is local and uses normalized transcript content. Preview lists show up to 100 hits; conversation filtering still uses all matching block anchors. To keep indexing bounded, logs over 64 MiB are skipped, individual blocks are limited to 300,000 bytes, and each transcript index is limited to 16 MiB of text. Indexing notices identify skipped or shortened transcripts; counts refer to the indexed content. Unavailable logs are reported without discarding other results.
+
+Physical-style RGB and task-light fixtures illuminate the canvas independently. **LED modes** opens the top strip’s effect, brightness, and white-mode temperature controls. Effects include cycling or static rainbow, breathing rainbow, white light, and off. Click the task lamp temperature badge for its own 2200–6500 K slider (default 5000 K). Lighting settings persist locally; reduced-motion preferences stop animated effects.
 
 Tool results offer readable output, expandable typed object trees (including nested JSON strings), formatted JSON, and original records. Quoted JSON strings are decoded in bounded layers. Acorn 8.15.0 parses literal command strings without executing code; Python, JavaScript, CSS, and other heredoc bodies are shown separately. Dynamic expressions remain in the original invocation. Highlight.js 11.11.1 and Acorn are bundled locally with their licenses; the dashboard makes no CDN requests.
 
@@ -181,11 +187,15 @@ cargo fmt --check
 cargo clippy --all-targets -- -D warnings
 cargo test
 node tests/decoder.cjs
+node tests/team-composer.cjs
+cargo build --release
+python3 tests/search_smoke.py ./target/release/agentbanter
 ```
 
 - `src/source.rs`: source identification and Codex record normalization.
 - `src/chatgpt.rs`: ChatGPT export validation, branch selection, and import.
 - `src/store.rs`: session indexing, lazy parsing, and polling.
+- `src/search.rs`: bounded transcript search, family scopes, caching, and exact block anchors.
 - `src/model.rs`: timeline events and statistics.
 - `src/tools.rs`: tool summaries and touched-file extraction.
 - `src/main.rs`: CLI, HTTP routes, and live streaming.

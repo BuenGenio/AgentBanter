@@ -90,7 +90,8 @@ const navGrace = (() => {
         tl.appendChild(frag(m.html));
     }
     window.enhanceCode?.(tl);
-    if (following()) {
+    document.dispatchEvent(new Event('conversation:updated'));
+    if (following() && !window.conversationSearchActive) {
       navGrace(1200);
       window.scrollTo({ top: document.documentElement.scrollHeight, behavior: 'smooth' });
     }
@@ -135,6 +136,7 @@ const navGrace = (() => {
         if(!response.ok)throw Error('Team unavailable');
         const data=await response.json();members=data.members;
         document.getElementById('team-note').textContent=data.note;
+        document.dispatchEvent(new CustomEvent('team:updated',{detail:data.members}));
         const list=document.getElementById('team-members');list.replaceChildren();
         const count=document.getElementById('agent-count');if(count)count.textContent=members.length;
         for(const m of members){
@@ -244,6 +246,7 @@ const navGrace = (() => {
     if(!id.startsWith('tool-'))return;
     const target=document.getElementById(id);
     if(!target || !target.closest('#timeline'))return;
+    window.clearConversationSearch?.();
     const follow=document.getElementById('t-follow');if(follow)follow.checked=false;
     const tools=document.getElementById('t-tools');
     if(tools){tools.checked=true;tools.dispatchEvent(new Event('change'));}

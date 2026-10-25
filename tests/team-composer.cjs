@@ -18,10 +18,11 @@ const members=[
  {id:'child',name:'Reviewer',provider:'Codex',sendable:true,parent_name:'Lead'},
  {id:'claude-child',name:'Reader',provider:'Claude',sendable:false,parent_name:'Lead'}
 ];
-const sent=[], timers=[];
+const sent=[], timers=[], events=[];
 const code=fs.readFileSync('static/app.js','utf8').split('// Team membership')[1].split('// Process references')[0];
 vm.runInNewContext('// Team membership'+code,{
- document:{hidden:false,getElementById:id=>ids[id],createElement:tag=>new Element(tag)},
+ document:{hidden:false,getElementById:id=>ids[id],createElement:tag=>new Element(tag),dispatchEvent:event=>events.push(event)},
+ CustomEvent:class {constructor(type,options){this.type=type;this.detail=options.detail;}},
  setTimeout:fn=>timers.push(fn),encodeURIComponent,
  fetch:async (url,options)=>{
   if(url.endsWith('/team'))return {ok:true,json:async()=>({members,note:'Recorded team'})};
@@ -32,6 +33,7 @@ vm.runInNewContext('// Team membership'+code,{
 (async()=>{
  await new Promise(setImmediate);
  assert.equal(select.options.length,4);
+ assert.equal(events[0].type,'team:updated');assert.equal(events[0].detail.length,3);
  assert.equal(select.options.find(o=>o.value==='claude-child').disabled,true);
  select.value='@team';select.listeners.change();box.value='Hello everyone';
  await ids.composer.listeners.submit({preventDefault(){}});

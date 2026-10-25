@@ -61,6 +61,8 @@
     }
     return pre;
   }
+  const inspectors = new WeakMap();
+  window.revealInspectorMatch = (host, query, caseSensitive) => inspectors.get(host)?.(query, caseSensitive);
   window.renderInspector = (host, raw, readable) => {
     host.replaceChildren(); host.dataset.enhanced = '1';
     let value = decode(raw); const parsed = typeof value === 'object' && value !== null;
@@ -73,8 +75,14 @@
     function tab(name, build) { const button=el('button','',name);button.type='button';button.onclick=()=>choose(button,build);tabs.push(button);bar.append(button);return button; }
     if (readable !== undefined) tab('Output',()=>code(readable, typeof decode(readable)==='object' ? 'json' : 'plaintext'));
     const treeTab = tab('Object tree',()=>tree(value));
-    tab('JSON',()=>code(JSON.stringify(value,null,2),'json'));
-    tab('Original',()=>code(typeof raw==='string' ? raw : JSON.stringify(raw,null,2),parsed?'json':'plaintext'));
+    const jsonTab = tab('JSON',()=>code(JSON.stringify(value,null,2),'json'));
+    const originalTab = tab('Original',()=>code(typeof raw==='string' ? raw : JSON.stringify(raw,null,2),parsed?'json':'plaintext'));
+    inspectors.set(host, (query, sensitive) => {
+      const contains = text => (sensitive ? text : text.toLocaleLowerCase()).includes(sensitive ? query : query.toLocaleLowerCase());
+      if (contains(content.textContent)) return;
+      if (contains(JSON.stringify(value,null,2))) jsonTab.click();
+      else if (contains(typeof raw === 'string' ? raw : JSON.stringify(raw))) originalTab.click();
+    });
     const copy = el('button','copy-record','Copy');copy.type='button';copy.onclick=async()=>{try{await navigator.clipboard.writeText(content.textContent);copy.textContent='Copied';}catch{copy.textContent='Copy unavailable';}};bar.append(copy);
     host.append(bar,content);(readable !== undefined ? tabs[0] : treeTab).click();
   };

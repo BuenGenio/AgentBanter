@@ -1,0 +1,10 @@
+<details class="conversation-branch hover-branch" data-session-id="{{m.id}}">
+  <summary>
+    <a class="conversation {{ 'selected' if selected == m.id }}" href="/s/{{m.id}}" {% if selected == m.id %}aria-current="page"{% endif %} data-session-id="{{m.id}}" data-search="{{m.title}} {{m.project}} {{m.agent}} {{m.agent_name or ''}}" title="{{m.title}}">
+      <span class="session-source {{m.source}}">{{m.agent_name or m.agent}}</span><span class="session-age">{% if m.live %}<i class="status-dot"></i>{% endif %}{{m.age}}</span>
+      <span class="session-title">{{m.title}}</span>
+    </a>
+  </summary>
+  <div class="conversation-more"><code>{{m.cwd}}</code>{% if m.agent_task %}<p>{{m.agent_task}}</p>{% endif %}</div>
+  <div class="conversation-children">{% for child in m.children %}{% with m=child %}{% include "partials/conversation.html" %}{% endwith %}{% endfor %}</div>
+</details>

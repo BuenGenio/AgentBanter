@@ -2,6 +2,13 @@
 {% block title %}{{ s.title }} · AgentBanter{% endblock %}
 {% block body %}
 <div class="workspace">
+  <form id="task-search" class="task-search" role="search" data-session="{{selected}}" autocomplete="off">
+    <div class="search-row"><label for="task-query">TASK LAMP / THIS CONVERSATION</label><span class="nest-legend" aria-label="Nesting colours go from cool outer levels to warm inner levels">Outer <i style="--swatch:#b6a1f2"></i><i style="--swatch:#91acf7"></i><i style="--swatch:#72c2ee"></i><i style="--swatch:#71cdbf"></i><i style="--swatch:#a3cf89"></i><i style="--swatch:#e4d67d"></i><i style="--swatch:#edaf77"></i><i style="--swatch:#ef8d88"></i> Inner</span></div>
+    <div class="search-row"><input id="task-query" type="search" maxlength="512" placeholder="Search messages, commands, tool output…" aria-label="Search this conversation"><select id="task-mode" aria-label="Conversation search mode"><option value="find">Find in context</option><option value="filter">Matching blocks only</option></select><button type="button" id="task-clear">Clear</button></div>
+    <div class="search-row"><select id="task-kind" aria-label="Filter block type"><option value="all">All block types</option><option value="prompt">Your messages</option><option value="reply">Agent replies</option><option value="command">Commands</option><option value="tool">Tool runs</option><option value="inferred">Inferred decisions</option><option value="decision">Other decisions</option><option value="reasoning">Reasoning summaries</option></select><select id="task-agent" aria-label="Filter agent"><option value="all">All agents in this conversation</option></select><label class="search-option"><input id="task-regex" type="checkbox"> Regex</label><label class="search-option"><input id="task-case" type="checkbox"> Match case</label><button type="button" id="task-previous" aria-label="Previous matching block">↑</button><button type="button" id="task-next" aria-label="Next matching block">↓</button></div>
+    <p id="task-status" role="status">Search includes collapsed blocks and recorded child agents.</p>
+    <details id="task-results" class="search-results" hidden><summary>Matching blocks</summary><ol id="task-hits"></ol></details>
+  </form>
 <header class="bench-header">
   <div class="bench-label"><span class="status-dot"></span> ON THE BENCH <span class="lamp-label">TASK LIGHT · 5000K</span></div>
 
