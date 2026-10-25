@@ -1,17 +1,20 @@
 {% extends "base.html" %}
-{% block title %}{{ s.title }} · Claude Progress{% endblock %}
+{% block title %}{{ s.title }} · AgentBanter{% endblock %}
 {% block body %}
-<header class="top">
-  <div class="nav-glass" aria-hidden="true"></div>
-  <a class="back" href="/" title="All sessions">←</a>
+<div class="workspace">
+<header class="bench-header">
+  <div class="bench-label"><span class="status-dot"></span> ON THE BENCH <span class="lamp-label">TASK LIGHT · 5000K</span></div>
+
+
   <h1 title="{{ s.title }}">{{ s.title }}</h1>
   <div class="meta">
+    <span class="branch">{{ agent }}{% if is_import %} · imported{% endif %}</span>
     <span class="mono" title="{{ s.cwd }}">{{ s.project }}</span>
     {% if s.branch %}<span class="branch">⎇ {{ s.branch }}</span>{% endif %}
     <span id="hdr-stats" class="hstats">{% include "partials/header_stats.html" %}</span>
   </div>
-  <div class="controls">
-    <label title="Show Claude's reasoning"><input type="checkbox" id="t-reasoning" checked> <span>reasoning</span></label>
+  <div class="controls"><span class="control-label">Inspect</span>
+    <label title="Show available reasoning summaries"><input type="checkbox" id="t-reasoning" checked> <span>reasoning</span></label>
     <label title="Show tool calls"><input type="checkbox" id="t-tools" checked> <span>tools</span></label>
     <label title="Show heuristically inferred decisions"><input type="checkbox" id="t-inferred" checked> <span>inferred</span></label>
     <label title="Auto-scroll to new activity"><input type="checkbox" id="t-follow" checked> <span>follow</span></label>
@@ -19,17 +22,59 @@
   </div>
 </header>
 <main class="layout">
-  <section id="timeline" class="timeline" data-session="{{ s.id }}" data-seq="{{ seq }}">
+  <div class="main-col">
+  <section id="timeline" class="timeline" data-session="{{ s.id }}" data-seq="{{ seq }}" data-generation="{{ generation }}">
+    {% if is_import %}<p class="source-note">ChatGPT export snapshot. Import a newer export to update this conversation. Attachments are shown as placeholders.</p>{% endif %}
     {% for b in blocks %}{% include "partials/block.html" %}{% endfor %}
   </section>
-  <aside class="decisions">
-    <details id="dpanel" open>
+
+  </div>
+  <aside class="right-rail">
+    <section id="team-panel" data-session="{{selected}}">
+      <details class="instrument join-panel" id="agents-instrument" open>
+      <summary><h2>Agents <span id="agent-count" class="count">0</span></h2></summary>
+      <p id="team-note" role="status">Reading recorded relationships…</p>
+      <ul id="team-members" class="team-members"></ul>
+      </details>
+    {% if can_send %}
+      <details class="instrument join-panel" id="message-instrument" open>
+      <summary><h2>Message an agent</h2></summary>
+      <form id="composer" class="join-composer" autocomplete="off">
+        <label for="recipient">Recipient · recorded team</label>
+        <select id="recipient" name="recipient" disabled><option value="">Loading team…</option></select>
+        <p id="delivery-mode" class="process-reference-note"></p>
+        <a id="recipient-link" href="/s/{{selected}}">View recipient conversation →</a>
+        <textarea name="text" rows="4" placeholder="Ask a question or share an idea…" aria-label="Message selected recipient" maxlength="32000" required></textarea>
+        <button type="submit">Send message</button>
+        <p class="composer-status" id="composer-status" role="status"></p>
+      </form>
+      </details>
+    {% endif %}
+    </section>
+
+    <details open class="instrument process-monitor" id="process-monitor" data-session="{{ s.id }}" aria-label="Session processes and ports">
+      <summary><h2>Processes & ports <span id="process-count" class="count">0</span></h2></summary>
+      <p id="process-status" role="status">Reading local processes…</p>
+      <input id="process-search" type="search" aria-label="Search processes and ports" placeholder="Name, PID, port, address…">
+      <div class="process-filters">
+        <label>Show<select id="process-kind"><option value="all">All process data</option><option value="listeners">Listening servers</option><option value="connections">Active connections</option><option value="TCP">TCP</option><option value="UDP">UDP</option><option value="IPC">IPC / Unix sockets</option><option value="no-sockets">No sockets</option></select></label>
+        <label>Association<select id="process-scope"><option value="all">Session + project</option><option value="session">Session-linked only</option><option value="project">Project candidates</option></select></label>
+      </div>
+      <div id="process-list"></div>
+      <details class="process-help"><summary>How processes are linked</summary><p id="process-note">Session environment markers and process ancestry link processes to a conversation. A shared working directory is only a project match.</p></details>
+    </details>
+    <section class="decisions">
+    <div class="tray-label">PARTS TRAY / 02</div>
+    <details class="instrument" id="dpanel" open>
       <summary><h2>Decisions <span class="count" id="dcount">{{ decisions|length }}</span></h2></summary>
       <ol id="decisions">
         {% for d in decisions %}{% include "partials/decision_panel.html" %}{% endfor %}
       </ol>
     </details>
+    </section>
   </aside>
 </main>
+</div>
 <script src="/static/app.js"></script>
+<script src="/static/monitor.js" defer></script>
 {% endblock %}

@@ -1,0 +1,15 @@
+const assert = require('node:assert/strict');
+const decoder = require('../static/decoder.js');
+assert.deepEqual(decoder.decode(JSON.stringify(JSON.stringify({a:[1,true]}))), {a:[1,true]});
+assert.equal(decoder.decode("'line\\nnext'"), 'line\nnext');
+assert.equal(decoder.decode('"C:\\\\new"'), 'C:\\new');
+assert.equal(decoder.decode('process.exit(1)'), 'process.exit(1)');
+assert.equal(decoder.decode('`value ${process.exit(1)}`'), '`value ${process.exit(1)}`');
+const command = "python3 - <<'PY'\nprint('hello')\nPY\ncat >> style.css <<'CSS'\n.foo { color: red; }\nCSS";
+const snippets = decoder.snippets('text(await tools.exec_command({cmd:' + JSON.stringify(command) + '}));');
+assert.equal(snippets[0].text, command);
+assert.equal(snippets[1].language, 'python');
+assert.equal(snippets[2].language, 'css');
+assert.equal(decoder.snippets('doThing({cmd:dangerous()})').length, 0);
+assert.equal(decoder.snippets('doThing({cmd:`echo ${dangerous()}`})').length, 0);
+console.log('Decoder checks passed.');

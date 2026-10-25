@@ -89,8 +89,8 @@ pub fn summarize(name: &str, input: &Value, cwd: Option<&str>) -> ToolSummary {
     };
 
     match name {
-        "Bash" => {
-            let cmd = s("command");
+        "Bash" | "exec_command" | "shell_command" => {
+            let cmd = input["cmd"].as_str().unwrap_or_else(|| s("command"));
             let desc = s("description");
             out.icon = "bash";
             out.summary = truncate(
@@ -103,6 +103,31 @@ pub fn summarize(name: &str, input: &Value, cwd: Option<&str>) -> ToolSummary {
             );
             out.detail = truncate(cmd, 4000);
             out.files = shell_targets(cmd).into_iter().map(|t| rel(&t)).collect();
+        }
+        "apply_patch" => {
+            let patch = s("patch");
+            out.icon = "edit";
+            out.files = patch
+                .lines()
+                .filter_map(|l| {
+                    [
+                        "*** Add File: ",
+                        "*** Update File: ",
+                        "*** Delete File: ",
+                        "*** Move to: ",
+                    ]
+                    .iter()
+                    .find_map(|prefix| l.strip_prefix(prefix))
+                })
+                .map(rel)
+                .collect();
+            out.summary = truncate(&format!("Patch {}", out.files.join(", ")), 140);
+            out.detail = truncate(patch, 4000);
+        }
+        "exec" => {
+            out.icon = "tool";
+            out.summary = "Run tools".to_string();
+            out.detail = s("input").to_owned();
         }
         "Edit" | "MultiEdit" => {
             let p = rel(s("file_path"));
@@ -220,6 +245,81 @@ pub fn summarize(name: &str, input: &Value, cwd: Option<&str>) -> ToolSummary {
     out
 }
 
+/// Unwrap text-content and command-output envelopes without interpreting arbitrary code.
+pub fn readable_output(text: &str) -> String {
+    fn unpack(value: &Value, depth: usize) -> String {
+        if depth > 8 {
+            return value.to_string();
+        }
+        match value {
+            Value::String(text) => serde_json::from_str::<Value>(text)
+                .map(|v| unpack(&v, depth + 1))
+                .unwrap_or_else(|_| text.clone()),
+            Value::Array(items) if items.iter().all(|v| v.get("text").is_some()) => items
+                .iter()
+                .map(|v| unpack(&v["text"], depth + 1))
+                .collect::<Vec<_>>()
+                .join("\n\n"),
+            Value::Object(object) if object.contains_key("output") => {
+                let mut meta = Vec::new();
+                if let Some(exit) = object.get("exit_code").filter(|v| !v.is_null()) {
+                    meta.push(format!("Exit {exit}"));
+                }
+                if let Some(time) = object.get("wall_time_seconds") {
+                    meta.push(format!("{time} s"));
+                }
+                format!(
+                    "{}\n{}",
+                    meta.join(" · "),
+                    unpack(&object["output"], depth + 1)
+                )
+                .trim()
+                .to_owned()
+            }
+            _ => serde_json::to_string_pretty(value).unwrap_or_default(),
+        }
+    }
+    serde_json::from_str::<Value>(text)
+        .map(|v| unpack(&v, 0))
+        .unwrap_or_else(|_| text.to_owned())
+}
+
+#[cfg(test)]
+mod output_tests {
+    use super::*;
+    #[test]
+    fn nested_output_is_readable_and_original_is_preserved_in_view() {
+        let raw = serde_json::json!([{"type":"input_text","text":"Script completed"},{"type":"input_text","text":"{\"exit_code\":0,\"output\":\"hello\\nworld\\n\"}"}]).to_string();
+        let readable = readable_output(&raw);
+        assert!(readable.contains("hello\nworld"));
+        assert!(!readable.contains("input_text"));
+        let r = crate::model::ResultView {
+            raw,
+            tool_id: "x".into(),
+            t: String::new(),
+            ok: true,
+            summary: "done".into(),
+            detail: readable,
+        };
+        let tool = crate::model::ToolView {
+            id: "x".into(),
+            step_id: "x".into(),
+            ts: String::new(),
+            t: String::new(),
+            name: "exec".into(),
+            icon: "tool".into(),
+            summary: "Run".into(),
+            detail: "</script><script>alert(1)</script>".into(),
+            files: vec![],
+            result: Some(r),
+        };
+        let html = crate::render::Renderer::new(None)
+            .render("partials/tool.html", minijinja::context! { tool })
+            .unwrap();
+        assert!(html.contains("inspector-data"));
+        assert!(!html.contains("<script>alert(1)</script>"));
+    }
+}
 #[cfg(test)]
 mod tests {
     use super::*;

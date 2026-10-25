@@ -1,13 +1,13 @@
 [package]
-name = "claude-progress"
+name = "agentbanter"
 version = "0.1.0"
 edition = "2024"
-rust-version = "1.85"
-description = "Live, readable view of Claude Code sessions: prompts, reasoning, tool steps and decisions"
+rust-version = "1.88"
+description = "Follow Codex, ChatGPT and Claude Code conversations, tool steps and decisions"
 license = "MIT"
-repository = "https://github.com/BuenGenio/claude-progress"
+repository = "https://github.com/BuenGenio/AgentBanter"
 readme = "README.md"
-keywords = ["claude", "claude-code", "transcript", "viewer", "sse"]
+keywords = ["codex", "chatgpt", "claude", "transcript", "viewer"]
 categories = ["development-tools", "visualization"]
 
 [dependencies]
@@ -17,7 +17,7 @@ axum = "0.8.9"
 chrono = { version = "0.4.45", features = ["serde"] }
 clap = { version = "4.6.7", features = ["derive"] }
 dirs = "7.0.0"
-minijinja = { version = "2.24.0", features = ["loader", "builtins"] }
+minijinja = { version = "2.24.0", features = ["loader", "builtins", "json"] }
 minijinja-autoreload = { version = "2.24.0", features = ["watch-fs"] }
 pulldown-cmark = "0.13.4"
 regex = "1.13.1"
@@ -26,3 +26,6 @@ serde_json = "1.0.151"
 tokio = { version = "1.53.1", features = ["full"] }
 tokio-stream = { version = "0.1.19", features = ["sync"] }
 tower-http = { version = "0.7.1", features = ["fs"] }
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2.189"

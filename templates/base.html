@@ -1,12 +1,29 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-theme="dark">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>{% block title %}Claude Progress{% endblock %}</title>
+<title>{% block title %}AgentBanter{% endblock %}</title>
 <link rel="stylesheet" href="/static/app.css">
 </head>
-<body>
+<body class="workbench">
+<div class="bench-light">
+  <div class="rgb-housing" aria-hidden="true"><span class="fixture-screw left"></span><div class="rainbow-led"></div><span class="fixture-screw right"></span></div>
+  <div class="task-housing"><span class="fixture-engraving">AB / TASK LAMP</span><div class="warm-led"></div><button class="fixture-rating" id="lamp-toggle" type="button" aria-expanded="false" aria-controls="lamp-settings" aria-label="Adjust task light temperature">5000 K ▾</button></div>
+</div>
+<section id="lamp-settings" class="lamp-settings" aria-label="Task light settings" hidden>
+  <div class="lamp-settings-title"><span>TASK LIGHT</span><button id="lamp-close" type="button" aria-label="Close task light settings">×</button></div>
+  <label for="lamp-temperature">Color temperature <output id="lamp-temperature-value" for="lamp-temperature">5000 K</output></label>
+  <input id="lamp-temperature" type="range" min="2200" max="6500" step="100" value="5000">
+  <div class="temperature-scale"><span>2200 K · warm</span><span>6500 K · cool</span></div>
+  <p>Adjust the light falling across your workbench.</p>
+</section>
+{% include "partials/sidebar.html" %}
 {% block body %}{% endblock %}
+<script src="/static/vendor/highlight.min.js"></script>
+<script src="/static/vendor/acorn.js"></script>
+<script src="/static/decoder.js"></script>
+<script src="/static/inspector.js"></script>
+<script src="/static/sidebar.js"></script>
 </body>
 </html>
