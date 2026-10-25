@@ -20,3 +20,4 @@ jobs:
           python3 -m unittest discover -s tests -p 'test_*.py'
           cargo build --release --locked
           python3 tests/packaged_smoke.py target/release/agentbanter
+          python3 tests/search_smoke.py target/release/agentbanter
