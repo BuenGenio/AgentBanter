@@ -39,6 +39,9 @@ pub fn configure(args: &mut Args, matches: &ArgMatches) -> Result<()> {
         "projects_dir",
         "codex_dir",
         "chatgpt_dir",
+        "ollama_dir",
+        "ollama_url",
+        "allow_ollama",
         "poll_ms",
         "allow_capture",
         "allow_send",
@@ -70,6 +73,9 @@ pub fn configure(args: &mut Args, matches: &ArgMatches) -> Result<()> {
     setting!(poll_ms, u64);
     setting!(allow_capture, bool);
     setting!(allow_send, bool);
+    setting!(allow_ollama, bool);
+    setting!(ollama_url, String);
+    setting!(ollama_dir, Option<PathBuf>);
     setting!(codex_bin, PathBuf);
     setting!(claude_bin, PathBuf);
     setting!(send_permission_mode, String);
@@ -84,6 +90,7 @@ pub fn configure(args: &mut Args, matches: &ArgMatches) -> Result<()> {
         ("projects_dir", &mut args.projects_dir),
         ("codex_dir", &mut args.codex_dir),
         ("chatgpt_dir", &mut args.chatgpt_dir),
+        ("ollama_dir", &mut args.ollama_dir),
         ("templates", &mut args.templates),
         ("static_dir", &mut args.static_dir),
     ] {
@@ -135,7 +142,7 @@ pub fn init_config(explicit: Option<&Path>) -> Result<()> {
         file,
         "{}",
         serde_json::to_string_pretty(
-            &json!({"bind":["127.0.0.1"],"port":7331,"allow_capture":false,"allow_send":false,"sources":["claude","codex","chatgpt"],"poll_ms":750})
+            &json!({"bind":["127.0.0.1"],"port":7331,"allow_capture":false,"allow_send":false,"allow_ollama":false,"sources":["claude","codex","chatgpt","ollama"],"poll_ms":750})
         )?
     )?;
     println!("Created {}", path.display());
@@ -238,6 +245,7 @@ fn server_args(args: &Args) -> Vec<OsString> {
             crate::source::Source::Claude => "claude",
             crate::source::Source::Codex => "codex",
             crate::source::Source::Chatgpt => "chatgpt",
+            crate::source::Source::Ollama => "ollama",
         })
         .collect::<Vec<_>>()
         .join(",");
@@ -246,6 +254,7 @@ fn server_args(args: &Args) -> Vec<OsString> {
         ("--projects-dir", &args.projects_dir),
         ("--codex-dir", &args.codex_dir),
         ("--chatgpt-dir", &args.chatgpt_dir),
+        ("--ollama-dir", &args.ollama_dir),
         ("--templates", &args.templates),
         ("--static", &args.static_dir),
     ] {
@@ -263,6 +272,10 @@ fn server_args(args: &Args) -> Vec<OsString> {
         "--send-permission-mode".into(),
         args.send_permission_mode.clone().into(),
     ]);
+    result.extend(["--ollama-url".into(), args.ollama_url.clone().into()]);
+    if args.allow_ollama {
+        result.push("--allow-ollama".into());
+    }
     if args.allow_capture {
         result.push("--allow-capture".into());
     }
@@ -356,7 +369,7 @@ mod tests {
             std::env::temp_dir().join(format!("agentbanter-settings-{}.json", std::process::id()));
         fs::write(
             &path,
-            r#"{"port":9000,"allow_capture":true,"bind":["127.0.0.1"],"static_dir":"assets"}"#,
+            r#"{"port":9000,"allow_capture":true,"allow_ollama":true,"ollama_url":"http://localhost:11435","ollama_dir":"recordings","bind":["127.0.0.1"],"static_dir":"assets"}"#,
         )
         .unwrap();
         let matches = Args::command().get_matches_from([
@@ -373,6 +386,22 @@ mod tests {
         configure(&mut args, &matches).unwrap();
         assert_eq!(args.port, 9100);
         assert!(args.allow_capture);
+        assert!(args.allow_ollama);
+        assert_eq!(args.ollama_url, "http://localhost:11435");
+        assert_eq!(
+            args.ollama_dir,
+            Some(path.parent().unwrap().join("recordings"))
+        );
+        let detached = server_args(&args)
+            .into_iter()
+            .map(|a| a.to_string_lossy().into_owned())
+            .collect::<Vec<_>>();
+        assert!(detached.iter().any(|a| a == "--allow-ollama"));
+        assert!(
+            detached
+                .windows(2)
+                .any(|a| a == ["--ollama-url", "http://localhost:11435"])
+        );
         assert_eq!(args.static_dir, Some(PathBuf::from("explicit")));
         fs::remove_file(path).unwrap();
     }

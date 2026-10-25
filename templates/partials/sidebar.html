@@ -1,6 +1,7 @@
 <aside class="conversation-sidebar" aria-label="Conversations">
   <a class="brand" href="/"><span class="brand-mark" aria-hidden="true">a<span>b</span></span><span>AgentBanter<small>THE CONVERSATION WORKBENCH</small></span></a>
   <a class="capture-link" href="/capture"><span>◉</span> Traffic inspector <small>LIVE CAPTURE ↗</small></a>
+  <a class="capture-link" href="/local"><span>◈</span> Local models <small>OLLAMA / REASONING ↗</small></a>
   <div class="drawer-heading"><span>Conversations</span><span class="drawer-count">{{ total }}</span></div>
   <nav class="conversation-list" aria-label="Select a conversation">
     {% for p in projects %}{% if p.tree %}

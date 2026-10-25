@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}Local models · AgentBanter{% endblock %}
+{% block body %}
+<main class="workspace local-workspace" id="local-workbench" data-enabled="{{ 'true' if local_enabled else 'false' }}">
+<header class="bench-header"><div class="bench-label">LOCAL MODELS / OLLAMA <span class="lamp-label">TASK LIGHT · 5000K</span></div><h1>A closer look at the thinking.</h1><p>Chat with a local model, or inspect requests routed here from another app.</p></header>
+<div class="local-layout">
+<section class="local-main">
+  <form id="local-chat" class="local-composer">
+    <div class="local-controls"><label>Model <select id="local-model" name="model" required aria-label="Local model"><option>Connecting…</option></select></label><label>Thinking <select id="local-think" aria-label="Thinking output"><option value="null">Model default</option></select></label><button id="local-refresh" type="button">Refresh models</button><button id="local-new" type="button">New chat</button></div>
+    <p id="local-model-info" role="status">Checking your Ollama endpoint…</p>
+    <label for="local-prompt">Your message</label><textarea id="local-prompt" rows="4" maxlength="32000" placeholder="Ask a question and inspect what the model emits…" required></textarea>
+    <div class="local-controls"><button id="local-send" type="submit" {% if not local_enabled %}disabled{% endif %}>Send locally</button><button id="local-stop" type="button" disabled>Stop</button><a id="local-conversation" hidden>Open recorded conversation →</a><span id="local-state" role="status">Ready</span></div>
+    {% if not local_enabled %}<p class="local-notice">Local chat and recording are disabled. Enable <code>allow_ollama</code> in the server settings, or start with <code>--allow-ollama</code> on a loopback address.</p>{% endif %}
+  </form>
+  <details class="local-panel" id="local-thinking" open><summary>Emitted thinking <span class="local-badge">Recorded model output</span></summary><pre id="local-thinking-text">Thinking will appear here when the model exposes it.</pre></details>
+  <details class="local-panel" open><summary>Final answer</summary><pre id="local-answer-text">The answer will appear separately.</pre></details>
+  <details class="local-panel" id="local-tools" hidden><summary>Requested tool calls</summary><p>These are recorded requests. AgentBanter does not execute tools for the local chat.</p><div id="local-tool-tree"></div></details>
+  <details class="local-panel" id="local-analysis-panel" open><summary>Analysis of the recorded thinking <span class="local-badge">Generated afterward</span></summary><p>This is a separate model interpretation of the emitted text. Verified quotes link back to that text; they do not verify the claims themselves.</p><button id="local-analyze" type="button" disabled>Analyze this trace locally</button><p id="local-analysis-status" role="status"></p><div id="local-analysis"></div></details>
+</section>
+<aside class="local-instruments">
+  <details class="local-panel instrument" open><summary>Measured activity</summary><dl id="local-metrics"><dt>Status</dt><dd>No trace selected</dd></dl></details>
+  <details class="local-panel instrument" open><summary>Record another app</summary><p>Use one of these base addresses in the other app:</p><label>Ollama API <code id="local-native-url"></code><button type="button" aria-label="Copy Ollama API address" data-copy="local-native-url">Copy address</button></label><label>OpenAI-compatible API <code id="local-openai-url"></code><button type="button" aria-label="Copy OpenAI-compatible API address" data-copy="local-openai-url">Copy address</button></label><p>Only requests sent through these addresses are recorded. Model-management actions such as pulling or deleting models are unavailable through this proxy.</p><details><summary>Grouping and connection details</summary><p>Set <code>X-AgentBanter-Conversation</code> to a stable ID to group an app's requests. Without it, each request is a separate recording. Responses include this ID and <code>X-AgentBanter-Trace</code>.</p><p>The upstream endpoint is <code>{{ollama_url}}</code>. This gateway forwards to that loopback endpoint and does not follow redirects. Whether a model executes locally or in Ollama's cloud depends on the model configured in Ollama. Browser apps on another origin need a same-origin backend connection.</p><p>Supported routes: native chat/generate, OpenAI-compatible chat completions, and model discovery. Responses are forwarded unchanged. Requests are limited to 32 MiB. Trace text previews are limited to 4 MiB per field and marked when shortened. Recordings stay on disk until removed by you.</p></details></details>
+  <details class="local-panel instrument" open><summary>Recent recordings</summary><p id="local-recordings-note">Workbench chats and requests from connected apps appear here.</p><ol id="local-recordings"></ol></details>
+  <details class="local-panel instrument"><summary>Raw trace fields</summary><div id="local-raw"><p>Select a recording to inspect its fields.</p></div></details>
+</aside>
+</div>
+</main>
+<script src="/static/local.js" defer></script>
+{% endblock %}

@@ -10,6 +10,7 @@
     <details id="task-results" class="search-results" hidden><summary>Matching blocks</summary><ol id="task-hits"></ol></details>
   </form>
 <header class="bench-header">
+  {% if is_ollama %}<a class="process-conversation-link" href="/local?session={{selected}}">Continue in Local models · inspect thinking and trace analysis →</a>{% endif %}
   <div class="bench-label"><span class="status-dot"></span> ON THE BENCH <span class="lamp-label">TASK LIGHT · 5000K</span></div>
 
 

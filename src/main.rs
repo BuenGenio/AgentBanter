@@ -5,6 +5,7 @@ mod install;
 mod launch;
 mod model;
 mod monitor;
+mod ollama;
 mod render;
 mod search;
 mod send;
@@ -68,7 +69,7 @@ struct Args {
         global = true,
         value_enum,
         value_delimiter = ',',
-        default_value = "claude,codex,chatgpt"
+        default_value = "claude,codex,chatgpt,ollama"
     )]
     sources: Vec<Source>,
     /// Codex rollout root (default: $CODEX_HOME/sessions or ~/.codex/sessions)
@@ -77,6 +78,15 @@ struct Args {
     /// Imported ChatGPT transcripts (default: OS data directory/agentbanter/chatgpt)
     #[arg(long, global = true)]
     chatgpt_dir: Option<PathBuf>,
+    /// Enable local Ollama chat and the recording proxy (loopback binding required)
+    #[arg(long, global = true)]
+    allow_ollama: bool,
+    /// Local Ollama HTTP endpoint
+    #[arg(long, global = true, default_value = "http://127.0.0.1:11434")]
+    ollama_url: String,
+    /// Recorded Ollama conversations (default: OS data directory/agentbanter/ollama)
+    #[arg(long, global = true)]
+    ollama_dir: Option<PathBuf>,
     /// Import an unzipped ChatGPT conversations.json into --chatgpt-dir, then exit
     #[arg(long, global = true, value_name = "JSON")]
     import_chatgpt: Option<PathBuf>,
@@ -155,6 +165,7 @@ struct App {
     capture: Arc<capture::Capture>,
     monitor: monitor::Monitor,
     search: Arc<search::Search>,
+    ollama: Arc<ollama::Ollama>,
     render: Renderer,
     sender: Option<Arc<send::Sender>>,
 }
@@ -270,13 +281,27 @@ async fn main() -> anyhow::Result<()> {
             .unwrap_or_else(|| home.join(".codex"))
             .join("sessions")
     });
+    let ollama_dir = args.ollama_dir.clone().unwrap_or_else(|| {
+        dirs::data_local_dir()
+            .unwrap_or_else(|| home.join(".local/share"))
+            .join("agentbanter/ollama")
+    });
+    anyhow::ensure!(
+        !args.allow_ollama || args.bind.iter().all(IpAddr::is_loopback),
+        "--allow-ollama requires loopback-only binding"
+    );
+    let local_models =
+        ollama::Ollama::new(&args.ollama_url, ollama_dir.clone(), args.allow_ollama)?;
     let roots: Vec<_> = [
         (Source::Claude, projects_dir),
         (Source::Codex, codex_dir),
         (Source::Chatgpt, chatgpt_dir),
+        (Source::Ollama, ollama_dir),
     ]
     .into_iter()
-    .filter(|(source, _)| args.sources.contains(source))
+    .filter(|(source, _)| {
+        args.sources.contains(source) || (*source == Source::Ollama && args.allow_ollama)
+    })
     .collect();
     let shown_roots = roots
         .iter()
@@ -296,6 +321,7 @@ async fn main() -> anyhow::Result<()> {
         capture: capture::Capture::new(args.allow_capture),
         monitor: monitor::Monitor::default(),
         search: Arc::new(search::Search::default()),
+        ollama: local_models,
         store,
         render: Renderer::new(templates.clone()),
         sender: args
@@ -313,6 +339,14 @@ async fn main() -> anyhow::Result<()> {
         )
         .route("/latest", get(latest))
         .route("/search", get(search::query))
+        .route("/local", get(ollama::page))
+        .route("/local/models", get(ollama::models))
+        .route("/local/model", axum::routing::post(ollama::model_info))
+        .route("/local/chat", axum::routing::post(ollama::chat))
+        .route("/local/traces", get(ollama::traces))
+        .route("/local/traces/{id}", get(ollama::trace))
+        .route("/local/traces/{id}/analysis", axum::routing::post(ollama::analyze))
+        .route("/ollama/{*endpoint}", get(ollama::proxy_get).post(ollama::proxy_post).layer(axum::extract::DefaultBodyLimit::max(32*1024*1024)))
         .route("/capture", get(capture::page))
         .route("/capture/records", get(capture::records))
         .route("/capture/control", axum::routing::post(capture::control))
@@ -480,7 +514,8 @@ async fn session(
             blocks => s.blocks(),
             decisions => s.decisions(),
             seq => s.events.len(),
-            can_send => app.sender.is_some() && loaded.source != Source::Chatgpt,
+            can_send => app.sender.is_some() && !matches!(loaded.source,Source::Chatgpt|Source::Ollama),
+            is_ollama => loaded.source==Source::Ollama,
 
             agent => loaded.source.label(),
             is_import => loaded.source == Source::Chatgpt,
@@ -581,6 +616,12 @@ async fn send_message(
     else {
         return send_error(StatusCode::NOT_FOUND, "session not found");
     };
+    if meta.source == Source::Ollama {
+        return send_error(
+            StatusCode::BAD_REQUEST,
+            "Open Local models to continue this Ollama conversation.",
+        );
+    }
     if !team::can_message(&meta) {
         return send_error(
             StatusCode::FORBIDDEN,

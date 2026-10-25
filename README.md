@@ -1,6 +1,6 @@
 # AgentBanter
 
-A readable dashboard for **Codex, ChatGPT, and Claude Code** conversations: prompts, replies, available reasoning summaries, tool steps, and decisions.
+A readable dashboard for **Codex, ChatGPT, Claude Code, and Ollama** conversations: prompts, replies, available reasoning summaries, tool steps, and decisions.
 
 AgentBanter is the renamed and expanded version of claude-progress. It runs as one Rust binary with its HTML, CSS, and JavaScript included.
 
@@ -9,6 +9,7 @@ AgentBanter is the renamed and expanded version of claude-progress. It runs as o
 | Codex desktop / CLI | Reads local rollout JSONL under `$CODEX_HOME/sessions` (default `~/.codex/sessions`) | Live |
 | ChatGPT | Imports `conversations.json` from an unzipped ChatGPT data export | Snapshot; import a newer export to update |
 | Claude Code | Reads `~/.claude/projects` | Live |
+| Ollama | Chats in AgentBanter or records requests from apps configured to use its gateway | Live; inference requires `--allow-ollama` |
 
 **ChatGPT imports are not a live connection to the ChatGPT app.** Cloud conversations without local rollout logs need an export. AgentBanter does not access app credentials or private cloud endpoints. Encrypted reasoning is not available; only plaintext reasoning or summaries actually present in the source can be shown. Image and other non-text attachments in exports appear as placeholders.
 
@@ -43,7 +44,7 @@ For development with live asset updates:
 cargo run --release -- serve --templates ./templates --static ./static --open
 ```
 
-All three sources are enabled by default; absent directories are skipped. The home page lists sessions grouped by project and labels their source. To show only Codex and ChatGPT:
+All transcript sources are enabled by default; absent directories are skipped. Local inference is opt-in. The home page lists sessions grouped by project and labels their source. To show only Codex and ChatGPT:
 
 ```sh
 agentbanter --sources codex,chatgpt --open
@@ -75,6 +76,27 @@ Codex and ChatGPT session URLs are prefixed with their source so their IDs canno
 **All reachable team members** freezes and displays the messageable recipients for a submission and tracks each receipt separately. Transcript-only members are excluded. Partial failures retain the draft; retry only the failed recipients to avoid duplicate messages. CLI failures retain the draft; uncertain delivery should be checked before retrying. Override executables with `--codex-bin` and `--claude-bin`.
 
 Process cards offer **View in conversation** when an executable path matches a recorded tool input or output. The link opens and highlights the entry, enables tools, and pauses Follow. Matches are references, not proof of process creation; cards without evidence say so.
+
+### Ollama: chat and record other apps
+
+With Ollama running and a model installed, start AgentBanter on a loopback address:
+
+```sh
+agentbanter serve --allow-ollama --bind 127.0.0.1
+# Open http://127.0.0.1:7331/local
+```
+
+**Local models** discovers installed models and their supported thinking controls. Chat there to see emitted thinking and the final answer separately, with time to first thinking/answer, stream activity, and Ollama's reported load, prompt-processing, and generation metrics. **Stop** retains the partial recording. Recorded chats appear in the conversation drawer and search; **Continue / inspect locally** opens their latest trace. Tools requested by a model are displayed but not executed.
+
+For another app, change its Ollama base address to `http://127.0.0.1:7331/ollama`, or its OpenAI-compatible base address to `http://127.0.0.1:7331/ollama/v1`. Only calls routed through AgentBanter are recorded. The native `api/chat` and `api/generate` routes and `v1/chat/completions` support streaming and non-streaming responses. Discovery routes are `api/tags`, `api/version`, `api/ps`, `api/show`, and `v1/models`; model pull/delete and other routes are unavailable. Apps must support a custom base URL; browser apps on another origin need their own same-origin backend connection. Responses preserve upstream body bytes, status, and content type; this is not a transparent proxy for every HTTP header or API route.
+
+Set the optional request header `X-AgentBanter-Conversation: my-chat-id` to group calls into a conversation (letters, numbers, hyphens and underscores, at most 128 characters). Otherwise each call creates a conversation. Response headers identify its `X-AgentBanter-Conversation` and `X-AgentBanter-Trace`. One request per conversation and up to eight requests overall may run at a time. Continue ordinary text recordings inside AgentBanter; multimodal recordings must continue in their original app.
+
+**Analyze this trace locally** makes a separate model request after a response. It organizes the emitted text into steps, assumptions, alternatives, and possible gaps. Exact source quotes link back to the trace; a verified quote means its text exists, not that its claim is correct. The analyst appears as a recorded child conversation. This interpretation is labeled as generated afterward: neither emitted thinking nor analysis reveals hidden neural activity, and AgentBanter cannot decrypt OpenAI's encrypted reasoning state. Models that expose no thinking still have their answer, request, and metrics recorded. See the [Ollama thinking documentation](https://docs.ollama.com/capabilities/thinking) and [OpenAI reasoning documentation](https://developers.openai.com/api/docs/guides/reasoning).
+
+The upstream defaults to `http://127.0.0.1:11434`; `--ollama-url` accepts only a loopback HTTP origin. Redirects and environment proxies are disabled. A loopback Ollama endpoint can still serve a cloud-backed model if you configure one in Ollama. Recordings persist under the OS local data directory's `agentbanter/ollama` folder, or `--ollama-dir`. On Unix the directory is private (0700), with new files 0600. Request bodies and parsed response records can contain sensitive text; they remain on disk until you remove them. Authorization headers are not forwarded or recorded.
+
+Requests are capped at 32 MiB; response frames at 32 MiB and text previews at 4 MiB per field. Truncation and unparsed records are reported. Raw JSONL retains parsed chunks beyond the text preview limit; oversized or unparseable frames cannot be reconstructed. The recent-recordings list shows the latest 30 traces, while older conversations remain in the drawer. Analysis uses up to 40,000 thinking characters and reports shortening. Measurements describe observed HTTP chunks and API totals, not individual neural steps or a precise split of thinking versus answer tokens. Fixture tests require no installed model or model download.
 
 ## Workbench and traffic inspector
 
@@ -118,11 +140,14 @@ Subagent transcripts are not nested under their parent call. Tool detail and fil
 ```text
 agentbanter [OPTIONS]
 
---sources <SOURCES>             Comma-separated claude,codex,chatgpt (default: all)
+--sources <SOURCES>             Comma-separated claude,codex,chatgpt,ollama (default: all)
 --projects-dir <DIR>            Claude transcript root (default: ~/.claude/projects)
 --codex-dir <DIR>               Codex rollout root (default: $CODEX_HOME/sessions)
 --chatgpt-dir <DIR>             Imported ChatGPT transcript directory
 --import-chatgpt <JSON>         Import ChatGPT JSON, then exit
+--allow-ollama                  Enable local chat and recording (loopback only)
+--ollama-url <URL>              Ollama origin (default: http://127.0.0.1:11434)
+--ollama-dir <DIR>              Recorded Ollama conversations and trace snapshots
 --port <PORT>                  Port (default: 7331)
 --bind <IP>                    Repeatable listen address
 --poll-ms <MS>                 Transcript polling interval (default: 750)
@@ -190,10 +215,12 @@ node tests/decoder.cjs
 node tests/team-composer.cjs
 cargo build --release
 python3 tests/search_smoke.py ./target/release/agentbanter
+python3 tests/ollama_smoke.py ./target/release/agentbanter
 ```
 
 - `src/source.rs`: source identification and Codex record normalization.
 - `src/chatgpt.rs`: ChatGPT export validation, branch selection, and import.
+- `src/ollama.rs`: local chat, streaming recording gateway, and evidence-linked trace analysis.
 - `src/store.rs`: session indexing, lazy parsing, and polling.
 - `src/search.rs`: bounded transcript search, family scopes, caching, and exact block anchors.
 - `src/model.rs`: timeline events and statistics.

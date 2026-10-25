@@ -63,6 +63,7 @@ jobs:
         run: |
           python3 tests/packaged_smoke.py 'target/${{ matrix.target }}/release/agentbanter'
           python3 tests/search_smoke.py 'target/${{ matrix.target }}/release/agentbanter'
+          python3 tests/ollama_smoke.py 'target/${{ matrix.target }}/release/agentbanter'
       - name: Archive
         run: python3 scripts/package.py archive --binary 'target/${{ matrix.target }}/release/agentbanter' --target '${{ matrix.target }}'
       - uses: actions/upload-artifact@v4

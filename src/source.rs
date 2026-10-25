@@ -9,6 +9,7 @@ pub enum Source {
     Claude,
     Codex,
     Chatgpt,
+    Ollama,
 }
 
 impl Source {
@@ -17,6 +18,7 @@ impl Source {
             Self::Claude => "Claude",
             Self::Codex => "Codex",
             Self::Chatgpt => "ChatGPT",
+            Self::Ollama => "Ollama",
         }
     }
     pub fn session_id(self, native: &str) -> String {
@@ -24,6 +26,7 @@ impl Source {
             Self::Claude => native.to_owned(),
             Self::Codex => format!("codex--{native}"),
             Self::Chatgpt => format!("chatgpt--{native}"),
+            Self::Ollama => format!("ollama--{native}"),
         }
     }
 }

@@ -34,14 +34,16 @@ Example:
 {
   "bind": ["127.0.0.1"],
   "port": 7331,
-  "sources": ["claude", "codex", "chatgpt"],
+  "sources": ["claude", "codex", "chatgpt", "ollama"],
   "allow_capture": true,
   "allow_send": true,
+  "allow_ollama": true,
+  "ollama_url": "http://127.0.0.1:11434",
   "poll_ms": 750
 }
 ```
 
-Optional keys: `projects_dir`, `codex_dir`, `chatgpt_dir`, `templates`, `static_dir`, `codex_bin`, `claude_bin`, and `send_permission_mode`. No config is required for a normal viewing session. `open` requires the first bind address to be loopback; explicit remote binding is supported by `serve`.
+Optional keys: `projects_dir`, `codex_dir`, `chatgpt_dir`, `ollama_dir`, `templates`, `static_dir`, `codex_bin`, `claude_bin`, and `send_permission_mode`. No config is required for a normal viewing session. `allow_ollama` defaults to false and requires every bind address to be loopback; it enables chat and recording at `/local` and `/ollama`. The Ollama endpoint must be a loopback HTTP origin. An existing source list need not be edited when enabling Ollama: its recording directory is included automatically. `open` requires the first bind address to be loopback; explicit remote binding is supported by `serve` when local inference and capture are disabled.
 
 ## GNOME / KDE
 

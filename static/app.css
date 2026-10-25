@@ -534,3 +534,49 @@ html { scroll-padding-top:calc(var(--bench-top) + var(--task-search-height,160px
 .conversation-reference-target { scroll-margin-top:calc(var(--bench-top) + var(--task-search-height,160px) + 28px); }
 @media(max-width:1000px){.right-rail{position:static;max-height:none;}}
 @media(max-width:760px){.workspace > .task-search{margin:15px 18px 8px;}}
+
+/* The local-model bench shares the lighting, depth spectrum and field inspector. */
+.local-layout { display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:20px;padding:25px 32px 50px; }
+.local-main,.local-instruments { min-width:0; }
+.local-composer,.local-panel { border:1px solid #596b48;border-radius:6px;background:linear-gradient(120deg,rgba(var(--lamp-rgb),.04),transparent),#192219;padding:15px;margin-bottom:16px; }
+.local-panel > summary { font:12px var(--mono);color:#d8ddc2;padding:5px 0; }
+.local-panel[open] > summary { margin-bottom:14px; }
+.local-controls { display:flex;flex-wrap:wrap;gap:10px;align-items:end; }
+.local-controls label { flex:1;min-width:130px; }
+.local-composer label,.local-instruments label { display:block;font:11px/1.6 var(--mono);color:#b2c0a4; }
+.local-composer select,.local-composer textarea,.local-workspace button { border:1px solid #66784e;border-radius:4px;background:#111b13;color:#dae3cb;font:12px var(--mono);padding:9px; }
+.local-composer select { display:block;width:100%;margin-top:5px; }
+.local-composer textarea { width:100%;margin:8px 0 14px;resize:vertical;line-height:1.6; }
+.local-workspace button { cursor:pointer;background:linear-gradient(#3b4930,#25351f); }
+.local-workspace button:hover { border-color:#b3c196; }
+.local-workspace button:disabled { opacity:.5;cursor:default; }
+#local-send { color:#e7e4b5;border-color:#8d9c67; }
+#local-state,#local-model-info,#local-analysis-status { font:11px/1.7 var(--mono);color:#b5c3a6;overflow-wrap:anywhere; }
+#local-conversation { color:#e1c48f;font:11px var(--mono);text-decoration:underline;text-underline-offset:3px; }
+.local-panel p { font-size:12px;line-height:1.7;color:#b6c3ab; }
+.local-panel pre { margin:0;white-space:pre-wrap;overflow-wrap:anywhere;font:12px/1.8 var(--mono);color:#d9e0d0;max-height:600px;overflow:auto; }
+#local-thinking-text { color:#bab2de; }
+.local-badge { display:inline-block;margin:5px 8px;border:1px solid #657454;border-radius:3px;padding:2px 5px;color:#9eae93;font:9px var(--mono); }
+.local-instruments { align-self:start;position:sticky;top:calc(var(--bench-top) + 15px);max-height:calc(100vh - var(--bench-top) - 30px);overflow:auto;scrollbar-width:thin; }
+.local-instruments .local-panel { padding:12px; }
+#local-metrics { display:grid;grid-template-columns:1fr 1fr;gap:8px;font:10px/1.7 var(--mono); }
+#local-metrics dt { color:#93a586; }#local-metrics dd { margin:0;color:#d8dabb;overflow-wrap:anywhere; }
+.local-instruments code { display:block;overflow-wrap:anywhere;font:10px/1.7 var(--mono);color:#c7d9bd;margin:6px 0; }
+.local-instruments details details { padding:8px;margin-top:15px; }
+.local-instruments details details > summary { font-size:10px; }
+.local-notice { padding:10px;border-left:2px solid #ddbf7e;color:#caba98; }
+#local-recordings { list-style:none;padding:0;margin:0; }
+#local-recordings li { border-bottom:1px solid #485b3d;padding:10px 0; }
+#local-recordings button { width:100%;text-align:left;font-size:10px; }
+#local-recordings small { display:block;overflow-wrap:anywhere;margin-top:8px;color:#9bae8e;line-height:1.6; }
+#local-analysis ol { padding-left:22px; }#local-analysis li { margin-bottom:14px;line-height:1.7;font-size:12px; }
+#local-analysis details { padding:10px;margin:12px 0;background:#111b1380; }
+.local-workspace .local-quote,.local-workspace .local-unverified { display:block;text-align:left;white-space:pre-wrap;overflow-wrap:anywhere;font:11px/1.7 var(--mono);margin:8px 0;width:100%;background:#203b2c;color:#b4d5b4; }
+.local-workspace .local-unverified { background:#3d2c24;color:#d4b390; }
+.local-evidence { color:#10170d;background:#e8d780;box-shadow:0 0 15px #e8d78055; }
+.local-workspace .inspector-body { font-size:10px;padding:8px; }
+.local-workspace .inspector-tabs { flex-wrap:wrap;padding:5px; }
+.session-source.ollama { color:#b5bbeb; }
+@media(max-width:1150px){.local-layout{grid-template-columns:minmax(0,1fr);padding:20px;}.local-instruments{position:static;max-height:none;display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px;}.local-instruments .local-panel{margin:0;}}
+@media(max-width:620px){.local-layout{padding:15px;}.local-controls{align-items:stretch;}.local-controls label{min-width:100%;}.local-instruments{display:block;}.local-instruments .local-panel{margin-bottom:15px;}}
+.local-instruments { scrollbar-color:#4c5941 transparent; }
