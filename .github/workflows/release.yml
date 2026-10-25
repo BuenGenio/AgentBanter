@@ -3,6 +3,11 @@ on:
   push:
     tags: ['v*']
   workflow_dispatch:
+    inputs:
+      create_draft:
+        description: Create a version tag and draft release after all builds pass
+        type: boolean
+        default: false
 permissions:
   contents: read
 jobs:
@@ -83,14 +88,17 @@ jobs:
           name: release-bundle
           path: dist/*
       - name: Create draft release
-        if: startsWith(github.ref, 'refs/tags/')
+        if: startsWith(github.ref, 'refs/tags/') || inputs.create_draft
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
-          RELEASE_TAG: ${{ github.ref_name }}
         run: |
+          RELEASE_TAG="v$(python3 scripts/package.py version)"
+          if existing_sha=$(gh api "repos/$GH_REPO/commits/$RELEASE_TAG" --jq .sha 2>/dev/null); then
+            test "$existing_sha" = "$GITHUB_SHA"
+          fi
           if ! gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
-            gh release create "$RELEASE_TAG" --draft --verify-tag --generate-notes --title "AgentBanter $RELEASE_TAG"
+            gh release create "$RELEASE_TAG" --draft --target "$GITHUB_SHA" --generate-notes --title "AgentBanter $RELEASE_TAG"
           fi
           test "$(gh release view "$RELEASE_TAG" --json isDraft --jq .isDraft)" = true
           gh release upload "$RELEASE_TAG" dist/*.tar.gz dist/SHA256SUMS dist/agentbanter.rb --clobber

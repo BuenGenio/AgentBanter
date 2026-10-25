@@ -93,7 +93,7 @@ The target must match the executable you built. Archives and per-file SHA-256 ch
 - `x86_64-unknown-linux-musl` on `ubuntu-24.04`.
 - `aarch64-unknown-linux-musl` on `ubuntu-24.04-arm`.
 
-The Linux jobs validate the desktop entry and its installation in an isolated home directory. Browser launchers are mocked; smoke tests send no prompts to agents. The release assembly job requires all four archives, derives each formula checksum from the bytes, checks Ruby syntax, and produces `SHA256SUMS` and `agentbanter.rb`. Manual workflow dispatch creates build artifacts without publishing a release. A version tag creates a **draft** release; it will not overwrite a published release's assets.
+The Linux jobs validate the desktop entry and its installation in an isolated home directory. Browser launchers are mocked; smoke tests send no prompts to agents. The release assembly job requires all four archives, derives each formula checksum from the bytes, checks Ruby syntax, and produces `SHA256SUMS` and `agentbanter.rb`. Manual workflow dispatch creates build artifacts by default. With `create_draft: true`, it creates a version tag at the tested commit and a draft release only after all builds pass. Tags created by the workflow token do not recursively start another workflow. A version tag creates a **draft** release; it will not overwrite a published release's assets.
 
 After reviewing and committing the desired release snapshot:
 
