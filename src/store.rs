@@ -315,6 +315,20 @@ fn peek(path: &Path, slug: &str, source: Source, mtime: SystemTime, size: u64) -
                 let Ok(v) = serde_json::from_str::<Value>(line) else {
                     continue;
                 };
+                if source == Source::Ollama {
+                    if let Some(model) = v["local_model"].as_str() {
+                        agent_name = Some(if v["local_role"] == "trace analyst" {
+                            format!("{model} · analyst")
+                        } else {
+                            model.to_owned()
+                        });
+                    }
+                    if let Some(parent) = v["local_parent"].as_str() {
+                        parent_id = Some(parent.into());
+                        agent_task =
+                            Some("Analysis of recorded thinking, generated afterward".into());
+                    }
+                }
                 if source == Source::Codex && v["type"] == "session_meta" {
                     let spawn = &v["payload"]["source"]["subagent"]["thread_spawn"];
                     agent_task = spawn["agent_role"]

@@ -27,7 +27,7 @@ pub fn members<'a>(metas: &'a [SessionMeta], selected: &str) -> Vec<&'a SessionM
 pub fn can_message(m: &SessionMeta) -> bool {
     // Child transcripts are not independent delivery endpoints. In particular,
     // Codex multi-agent v2 rejects direct app-server input to sub-agents.
-    m.source != Source::Chatgpt && m.parent_id.is_none()
+    !matches!(m.source, Source::Chatgpt | Source::Ollama) && m.parent_id.is_none()
 }
 
 pub fn view(metas: &[SessionMeta], selected: &str) -> Value {
@@ -41,8 +41,8 @@ pub fn view(metas: &[SessionMeta], selected: &str) -> Value {
             "name":m.agent_name.as_deref().unwrap_or(if m.parent_id.is_none() {m.agent.as_str()} else {m.title.as_str()}), "task":m.agent_task.as_ref().unwrap_or(&m.title), "provider":m.agent,
             "last_activity":m.mtime.to_rfc3339(), "cwd":m.cwd, "selected":m.id == selected,
             "recent_activity":m.live, "age":m.age, "sendable":sendable,
-            "evidence":if m.parent_id.is_none() {"Selected conversation or recorded parent"} else if m.source == Source::Codex {"Codex thread_spawn parent_thread_id"} else {"Claude parent/subagents transcript location"},
-            "mode":if !sendable {"Direct messaging is unavailable for this child agent. Open or message its parent conversation."}
+            "evidence":if m.parent_id.is_none() {"Selected conversation or recorded parent"} else if m.source == Source::Codex {"Codex thread_spawn parent_thread_id"} else if m.source==Source::Ollama {"Recorded Ollama trace-analysis relationship"} else {"Claude parent/subagents transcript location"},
+            "mode":if !sendable {if m.source==Source::Ollama {"Continue this conversation through Local models."} else {"Direct messaging is unavailable for this child agent. Open or message its parent conversation."}}
                 else if m.source == Source::Codex {"Queue to this Codex thread. Acceptance is not a reply."}
                 else {"Continue Claude session; active sessions may fork. This does not message running children."}
         })

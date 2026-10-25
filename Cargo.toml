@@ -3,7 +3,7 @@ name = "agentbanter"
 version = "0.1.1"
 edition = "2024"
 rust-version = "1.88"
-description = "Follow Codex, ChatGPT and Claude Code conversations, tool steps and decisions"
+description = "Inspect Codex, ChatGPT, Claude Code and Ollama conversations, thinking and tool steps"
 license = "MIT"
 repository = "https://github.com/BuenGenio/AgentBanter"
 readme = "README.md"
@@ -21,6 +21,7 @@ minijinja = { version = "2.24.0", features = ["loader", "builtins", "json"] }
 minijinja-autoreload = { version = "2.24.0", features = ["watch-fs"] }
 pulldown-cmark = "0.13.4"
 regex = "1.13.1"
+reqwest = { version = "0.13.5", default-features = false, features = ["json", "stream"] }
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.151"
 tokio = { version = "1.53.1", features = ["full"] }

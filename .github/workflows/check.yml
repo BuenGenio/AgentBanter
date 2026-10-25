@@ -21,3 +21,4 @@ jobs:
           cargo build --release --locked
           python3 tests/packaged_smoke.py target/release/agentbanter
           python3 tests/search_smoke.py target/release/agentbanter
+          python3 tests/ollama_smoke.py target/release/agentbanter
