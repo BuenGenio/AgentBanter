@@ -8,9 +8,24 @@
 </head>
 <body class="workbench">
 <div class="bench-light">
-  <div class="rgb-housing" aria-hidden="true"><span class="fixture-screw left"></span><div class="rainbow-led"></div><span class="fixture-screw right"></span></div>
+  <div class="rgb-housing"><span class="fixture-screw left"></span><div class="rainbow-led" aria-hidden="true"></div><button type="button" id="rgb-toggle" class="rgb-toggle" aria-expanded="false" aria-controls="rgb-settings">LED modes ▾</button><span class="fixture-screw right"></span></div>
+  <form id="global-search" class="global-search" role="search" autocomplete="off">
+    <label for="global-query">ALL CONVERSATIONS</label>
+    <input id="global-query" type="search" maxlength="512" placeholder="Search every conversation and agent…" aria-label="Search all conversations">
+    <select id="global-mode" aria-label="Global search mode"><option value="find">Find blocks</option><option value="filter">Filter conversations</option></select>
+    <label class="search-option"><input id="global-regex" type="checkbox"> Regex</label>
+    <button type="submit">Search</button><button type="button" id="global-clear">Clear</button>
+  </form>
   <div class="task-housing"><span class="fixture-engraving">AB / TASK LAMP</span><div class="warm-led"></div><button class="fixture-rating" id="lamp-toggle" type="button" aria-expanded="false" aria-controls="lamp-settings" aria-label="Adjust task light temperature">5000 K ▾</button></div>
 </div>
+<section id="global-results" class="global-results search-results" aria-label="Global search results" hidden><p id="global-status" role="status"></p><ol id="global-hits"></ol></section>
+<section id="rgb-settings" class="lamp-settings rgb-settings" aria-label="Top LED settings" hidden>
+  <div class="lamp-settings-title"><span>TOP LED STRIP</span><button id="rgb-close" type="button" aria-label="Close top LED settings">×</button></div>
+  <label for="rgb-effect">Effect</label><select id="rgb-effect"><option value="rainbow">Rainbow cycle</option><option value="static">Static rainbow</option><option value="breathe">Breathing rainbow</option><option value="white">White light</option><option value="off">Off</option></select>
+  <label for="rgb-brightness">Brightness <output id="rgb-brightness-value">70%</output></label><input id="rgb-brightness" type="range" min="0" max="100" value="70">
+  <label for="rgb-temperature">Temperature · white mode <output id="rgb-temperature-value">5000 K</output></label><input id="rgb-temperature" type="range" min="2200" max="6500" step="100" value="5000">
+  <p>Settings are independent of the task lamp. Reduced motion stops animated effects.</p>
+</section>
 <section id="lamp-settings" class="lamp-settings" aria-label="Task light settings" hidden>
   <div class="lamp-settings-title"><span>TASK LIGHT</span><button id="lamp-close" type="button" aria-label="Close task light settings">×</button></div>
   <label for="lamp-temperature">Color temperature <output id="lamp-temperature-value" for="lamp-temperature">5000 K</output></label>
@@ -24,6 +39,9 @@
 <script src="/static/vendor/acorn.js"></script>
 <script src="/static/decoder.js"></script>
 <script src="/static/inspector.js"></script>
+<script src="/static/structure.js"></script>
 <script src="/static/sidebar.js"></script>
+<script src="/static/lights.js"></script>
+<script src="/static/search.js"></script>
 </body>
 </html>

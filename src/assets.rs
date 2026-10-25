@@ -3,6 +3,10 @@
 //! so the look can still be edited live.
 
 pub const TEMPLATES: &[(&str, &str)] = &[
+    (
+        "partials/conversation.html",
+        include_str!("../templates/partials/conversation.html"),
+    ),
     ("capture.html", include_str!("../templates/capture.html")),
     (
         "partials/sidebar.html",
@@ -59,6 +63,21 @@ pub const TEMPLATES: &[(&str, &str)] = &[
 
 /// (path, content type, body)
 pub const STATIC: &[(&str, &str, &str)] = &[
+    (
+        "lights.js",
+        "text/javascript; charset=utf-8",
+        include_str!("../static/lights.js"),
+    ),
+    (
+        "search.js",
+        "text/javascript; charset=utf-8",
+        include_str!("../static/search.js"),
+    ),
+    (
+        "structure.js",
+        "text/javascript; charset=utf-8",
+        include_str!("../static/structure.js"),
+    ),
     (
         "monitor.js",
         "text/javascript; charset=utf-8",

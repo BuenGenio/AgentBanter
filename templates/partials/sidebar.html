@@ -2,19 +2,13 @@
   <a class="brand" href="/"><span class="brand-mark" aria-hidden="true">a<span>b</span></span><span>AgentBanter<small>THE CONVERSATION WORKBENCH</small></span></a>
   <a class="capture-link" href="/capture"><span>◉</span> Traffic inspector <small>LIVE CAPTURE ↗</small></a>
   <div class="drawer-heading"><span>Conversations</span><span class="drawer-count">{{ total }}</span></div>
-  <label class="session-search"><span aria-hidden="true">⌕</span><input id="session-search" type="search" placeholder="Find a conversation…" aria-label="Find a conversation" autocomplete="off"><kbd>/</kbd></label>
   <nav class="conversation-list" aria-label="Select a conversation">
-    {% for p in projects %}
-    <section class="conversation-group">
-      <h2 title="{{ p.cwd }}"><span aria-hidden="true">▱</span> {{ p.project }} <span>{{ p.sessions|length }}</span></h2>
-      {% for m in p.sessions %}
-      <a class="conversation {{ 'selected' if selected == m.id }}" href="/s/{{ m.id }}" {% if selected == m.id %}aria-current="page"{% endif %} data-search="{{ m.title }} {{ p.project }} {{ m.agent }}" title="{{ m.title }}">
-        <span class="session-source {{ m.source }}">{{ m.agent }}</span><span class="session-age">{% if m.live %}<i class="status-dot"></i>{% endif %}{{ m.age }}</span>
-        <span class="session-title">{{ m.title }}</span>
-      </a>
-      {% endfor %}
-    </section>
-    {% endfor %}
+    {% for p in projects %}{% if p.tree %}
+    <details class="conversation-group hover-branch">
+      <summary title="{{p.cwd}}"><h2>{{p.project}}</h2></summary>
+      {% for m in p.tree %}{% include "partials/conversation.html" %}{% endfor %}
+    </details>
+    {% endif %}{% endfor %}
     <p class="sidebar-empty" id="search-empty" hidden>No conversations match.</p>
     {% if not projects %}<p class="sidebar-empty">Your conversations will appear here.</p>{% endif %}
   </nav>
